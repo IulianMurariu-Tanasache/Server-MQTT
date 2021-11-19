@@ -3,6 +3,14 @@ import threading
 import traceback
 from tkinter import *
 from tkinter.ttk import Treeview
+import struct
+
+# TODO:
+#   -clase separate pentru fiecare pachet si mosteneste packet
+#   -pack()/unpack() cu struct
+#   -imlpementare un switch/multe if-uri care sa aleaga ce pachet sa fie decodat/encodat
+#   -implementare toate prostiile alea
+
 
 topics = {
     'topic1': ['client1', 'client4', 'client5', 'client6'],
@@ -32,6 +40,15 @@ packet_types_to_int = {
 packet_types_to_string = dict(zip(packet_types_to_int.values(), packet_types_to_int.keys()))
 
 
+def decodeFixedHeader(data, client):
+    binary = format(int.from_bytes(data[0:1], "big"), '#010b')[2:]
+    packet_type = int(binary[0:4], 2)
+    flags = binary[4:]
+    print(packet_types_to_string[packet_type])
+    var_length, remaining_length = decodeVariableInt(data[1:])
+    ConnectPacket(client).decode(data[1 + var_length:])
+
+
 def decodeVariableInt(byte):
     # variable int decodare luata din documentatia mqtt
     # returneaza cati octeti a avut lungimea si cat e rezultatul decodarii
@@ -46,118 +63,57 @@ def decodeVariableInt(byte):
         multiplier = multiplier * 128
         i += 1
         binary = int.from_bytes(byte[i:i + 1], "big")
-    return i+1, val
+    return i + 1, val
 
 
 class Packet:
-    def __init__(self):
-        self.packet_types_decoder = {
-            'Reserverd': 0,
-            'CONNECT': self.decodeConnect,
-            'CONNACK': 2,
-            'PUBLISH': 3,
-            'PUBACK': 4,
-            'PUBREC': 5,
-            'PUBCOMP': 6,
-            'PUBREL': 7,
-            'SUBSCRIBE': 8,
-            'SUBACK': 9,
-            'UNSUBSCRIBE': 10,
-            'UNSUBACK': 11,
-            'PINGREQ': 12,
-            'PINGRESP': 13,
-            'DISCONNECT': 14,
-            'AUTH': 15
-        }
+    def __init__(self, client):
+        self.client = client
 
-    def decodeHeader(self, data, client):
-        var_length, remaining_length = self.decodeFixedHeader(data)
-        #self.packet_types_decoder[self.packet_type](data[1 + var_length:], client)
-        self.decodeConnect(data[1 + var_length:], client)
 
-    def decodeFixedHeader(self, header):
-        binary = format(int.from_bytes(header[0:1], "big"), '#010b')[2:]
-        self.packet_type = int(binary[0:4], 2)
-        self.flags = binary[4:]
-        # print(packet_type)
-        print(packet_types_to_string[self.packet_type])
-        return decodeVariableInt(header[1:])
+class ConnectPacket(Packet):
+    def __init__(self, client):
+        super().__init__(client)
 
-    def decodeConnect(self, header, client):
-        prot_len = int.from_bytes(header[0:2], "big")
-        protocol_name = header[2:6].decode('utf-8')
+    def decode(self, data):
+        prot_len, protocol_name, prot_version, conn_flags, keep_alive = struct.unpack('!H4sBcH', data[0:10])
+
+        protocol_name = protocol_name.decode(encoding='ascii')
+        connect_flags = format(ord(conn_flags.decode(encoding='ascii')), '#010b')[2:]
+
         print(protocol_name)
-        protocol_version = int.from_bytes(header[6:7], "big")
-        print(protocol_version)
+        print(prot_version)
+        print(keep_alive)
 
-        if protocol_name != 'MQTT' or protocol_version != 5:
+        if protocol_name != 'MQTT' or prot_version != 5:
             print('Eroare conectare1')
             return
 
-        connect_flags = format(int.from_bytes(header[7:8], "big"), '#010b')[2:]
-        reserved = connect_flags[0] == '1'
+        reserved = connect_flags[7] == '1'
         print(reserved, connect_flags[0], connect_flags, connect_flags[1])
 
         if reserved:
             print('Eroare conectare2')
             return
 
-        clean_start = connect_flags[1] == '1'
+        clean_start = connect_flags[6] == '1'
+        #TODO: implementare sesiune, will message, QoS, willRetain, password, username, keep alive, session expiry, user prop?, auth method?, auth data?
 
-        # chestii de sesiune
+        self.client.will = connect_flags[5] == '1'
+        self.client.willQoS = int(connect_flags[3:5], 2)
+        self.client.willRetain = connect_flags[2] == '1'
+        password = connect_flags[1] == '1'
+        username = connect_flags[0] == '1'
+        self.client.keepAlive = keep_alive
 
-        will = connect_flags[2] == '1'
-        client.will = will
+        var_length, property_length = decodeVariableInt(data[10:])
+        properties = data[10 + var_length: 10 + var_length + property_length]
 
-        will_qos = int(connect_flags[3:5], 2)
-        client.willQoS = will_qos
+        # unpack properties
 
-        will_retain = connect_flags[5] == '1'
-        client.willRetain = will_retain
+        payload = data[10 + var_length + property_length:]
 
-        password = connect_flags[6] == '1'
-        username = connect_flags[7] == '1'
-
-        keep_alive = int(connect_flags[8:10], 2)
-        client.keepAlive = keep_alive
-
-        var_length, property_length = decodeVariableInt(header[10:])
-        properties = header[10 + var_length:]
-
-        # session_expire_id =
-
-        payload = header[10 + var_length + property_length:]
-        id_len = int.from_bytes(payload[0:2], "big")
-
-        client_id = payload[2:2 + id_len].decode('utf-8')
-        client.id = client_id
-
-        payload = payload[2 + id_len:]
-        if will:
-            var_length, will_length = decodeVariableInt(payload)
-            # identifiere?
-            payload = payload[var_length + 1:]
-            client.willDelay = payload[0:4]
-
-            # payload format indicator
-            payload = payload[4 + 2 + 1:]
-
-            # client.messageExpiry =
-
-            lastWill_len = int.from_bytes(payload[1:3], "big")
-            client.lastWill = payload[3: 3 + lastWill_len].decode(encoding='ascii')
-
-            # si restul chestiilor de will
-
-        if username:
-            user_len = int.from_bytes(payload[0:2], "big")
-            client.user = payload[2: 2 + user_len].decode(encoding='ascii')
-            payload = payload[2 + user_len]
-
-        #if password:
-         #   pass_len = int(payload[0:2], 2)
-          #  client.password = payload[2: 2 + pass_len].decode(encoding='ascii')
-           # payload = payload[2 + pass_len]
+        # unpack payload
 
 
 class Client:
@@ -202,10 +158,10 @@ class Server:
                 # Asteapta cereri de conectare, apel blocant
                 conn, addr = self.socket.accept()
                 new_client = Client(conn, addr)
+                self.printLog(f'Connected client with address: {new_client.addr}')
+                # mai intai astept packetul de connect, apoi setez ca e connected
+                new_client.setConnected(True)
                 self.clients.append(new_client)
-                new_client_thread = threading.Thread(target=self.handle_client, args=(new_client,))
-                new_client_thread.start()
-
             except OSError:
                 print('Closed')
                 break
@@ -223,6 +179,8 @@ class Server:
         self.printLog('Server starting on ip: ' + self.ip)
         self.listenThread = threading.Thread(target=self.listen, args=())
         self.listenThread.start()
+        self.handleClientsThread = threading.Thread(target=self.handle_clients, args=())
+        self.handleClientsThread.start()
 
     def stop(self):
         if not self.state:
@@ -232,26 +190,21 @@ class Server:
         self.printLog('Stopping server...')
         # print("Serverul se opreste")
 
-    def handle_client(self, client):
-        self.printLog(f'Connected client with address: {client.addr}')
-        # mai intai astept packetul de connect, apoi setez ca e connected
-        client.setConnected(True)
-        while client.connected:
-            data = client.conn.recv(1024)
-            data_decoded = data.decode(encoding='ascii')
-            # Daca functia recv returneaza None, clientul a inchis conexiunea
-            if data_decoded == 'disc':
-                client.connected = False
-                break
-            else:
-                p = Packet()
-                p.decodeHeader(data,self)
+    def handle_clients(self):
+        while self.state:
+            for client in self.clients:
+                data = client.conn.recv(1024)
+                data_decoded = data.decode(encoding='ascii')
+                self.printLog(f'{client.addr} a trimis {data_decoded}')
+                # Daca functia recv returneaza None, clientul a inchis conexiunea
+                if data_decoded == 'disc':
+                    client.connected = False
+                    self.printLog(f'Client {client.addr} disconnected')
+                    self.clients.remove(client)
+                    client.conn.close()
+                else:
+                    decodeFixedHeader(data, client)
             # print(addr, ' a trimis: ', data)
-            self.printLog(f'{client.addr} a trimis {data_decoded}')
-            # conn.sendall(bytes('Receptionat!', encoding="ascii"))
-        self.printLog(f'Client {client.addr} disconnected')
-        self.clients.remove(client)
-        client.conn.close()
 
 
 def select_item(event):
