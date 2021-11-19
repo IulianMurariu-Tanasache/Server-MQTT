@@ -70,6 +70,9 @@ class Packet:
     def __init__(self, client):
         self.client = client
 
+     # def decode(self, data):
+     #     pass
+
 
 class ConnectPacket(Packet):
     def __init__(self, client):
