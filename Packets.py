@@ -1,4 +1,5 @@
 from HelperFunctions import *
+import functools as fct
 
 
 class Packet:
@@ -19,12 +20,13 @@ class ConnectPacket(Packet):
     def decode(self, data):
         prot_len, protocol_name, prot_version, conn_flags, keep_alive = struct.unpack('!H4sBcH', data[0:10])
 
-        protocol_name = protocol_name.decode(encoding='ascii')
-        connect_flags = format(ord(conn_flags.decode(encoding='ascii')), '#010b')[2:]
+        protocol_name = protocol_name.decode(encoding='utf-8')
+        # connect_flags = format(ord(conn_flags.decode(encoding='ascii')), '#010b')[2:]
+        connect_flags = bin(int.from_bytes(conn_flags, 'big')).lstrip('0b')
 
-        print(protocol_name)
-        print(prot_version)
-        print(keep_alive)
+        # print(protocol_name)
+        # print(prot_version)
+        # print(keep_alive)
 
         if protocol_name != 'MQTT' or prot_version != 4:
             print('Eroare conectare1')
@@ -54,20 +56,33 @@ class ConnectPacket(Packet):
 
         payload_data = data[10:]
         id_len, self.client.id = decodeUTF8(payload_data)
-        payload_data = payload_data[2 + id_len[0]:]
+        payload_data = payload_data[2 + id_len:]
 
         if self.client.will:
-            wt_len, self.client.willTopic = decodeUTF8(payload_data)
-            msg_len = struct.unpack('!H', payload_data[2 + wt_len[0]:2 + wt_len[0] + 2])
-            msg = struct.unpack(f'!{msg_len[0]}s', payload_data[wt_len[0] + 2 + 2:wt_len[0] + 2 + 2 + msg_len[0]])
-            print(msg[0].decode(encoding='utf-8'))
+            wt_len, self.client.willTopic = decodeUTF8(payload_data[0:])
+            msg_len = struct.unpack('!H', payload_data[2 + wt_len:2 + wt_len + 2])[0]
+            msg = struct.unpack(f'!{msg_len}s', payload_data[wt_len + 2 + 2:wt_len + 2 + 2 + msg_len])[0]
+            payload_data = payload_data[wt_len + 2 + 2 + msg_len:]
+            print(msg)
+
+        # de implementat user si parola si restul
+        if username:
+            user_len, self.client.user = decodeUTF8(payload_data[0:])
+            self.client.user = self.client.user
+            print(self.client.user)
+            payload_data = payload_data[user_len + 2:]
+
+        if password:
+            pass_len, self.client.password = decodeUTF8(payload_data[0:])
+            self.client.password = self.client.password
+            print(self.client.password)
+            payload_data = payload_data[pass_len + 2:]
 
         self.client.connected = True
 
-        # de implementat user si parola si restul
-
 
 class ConnackPacket(Packet):
+    # de revenit pentru sesiune si raspuns negativ
     def __init__(self, client):
         super().__init__(client)
 
@@ -79,3 +94,32 @@ class ConnackPacket(Packet):
 
         header = b''.join([fixedHeader, varHeader])
         return header
+
+
+class SubscribePacket(Packet):
+    def __init__(self, client):
+        super().__init__(client)
+
+    def decode(self, data):
+        packet_id, = struct.unpack('!H', data[0:2])
+        payload_data = data[2:]
+        # pachet_id e pentru a nu prelucra acelasi pachet de prea multe ori la QoS
+
+        # if data is gol -> protocol violation
+        payload_len = len(payload_data)
+        curr = 0
+
+        while curr < payload_len:
+            topic_len, topic = decodeUTF8(payload_data[curr:])
+            curr += 2 + topic_len
+            qos_byte = format(int.from_bytes(payload_data[curr:curr + 1], 'big'), '#010b')[2:]
+            good = fct.reduce(lambda a, b: a and (b == '0'), qos_byte[0:6])
+            print(good)
+            # if good == false -> malformed packet
+            qos = int(qos_byte[6:], base=2)
+
+            # if qos > 2 -> malformed packet
+            curr += 1
+
+            self.client.topics.append((topic, qos))
+            print(topic, qos)

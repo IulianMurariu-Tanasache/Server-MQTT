@@ -1,3 +1,4 @@
+import select
 import socket
 import threading
 import traceback
@@ -22,12 +23,14 @@ class Client:
         self.password = None
         self.id = None
         self.willTopic = ''
+        self.topics = []
+
+    def fileno(self):
+        return self.conn.fileno()
 
 
 class Server:
     def __init__(self, logBox, logs):
-        self.handleClientsThread = threading.Thread(target=self.handle_clients, args=())
-        self.listenThread = threading.Thread(target=self.listen, args=())
         self.state = False
         self.logBox = logBox
         self.logs = logs
@@ -67,6 +70,8 @@ class Server:
         self.socket.bind((self.ip, self.port))
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.printLog('Server starting on ip: ' + self.ip)
+        self.handleClientsThread = threading.Thread(target=self.handle_clients, args=())
+        self.listenThread = threading.Thread(target=self.listen, args=())
         self.listenThread.start()
         self.handleClientsThread.start()
 
@@ -75,39 +80,39 @@ class Server:
             return
         self.state = False
         self.socket.close()
+        self.listenThread.join()
+        self.handleClientsThread.join()
         self.printLog('Stopping server...')
-        # print("Serverul se opreste")
 
-    def handleClient(self, data, client):
-        binary = format(int.from_bytes(data[0:1], "big"), '#010b')[2:]
-        packet_type = int(binary[0:4], 2)
-        packet_type = packet_types_to_string[packet_type]
-        flags = binary[4:]
-        print(packet_type)
-        var_length, remaining_length = decodeVariableInt(data[1:])
-
-        # aici switch/if
-        ConnectPacket(client).decode(data[1 + var_length:])
-
-        # si aici
+    def handleClient(self, data, client, packet_type):
+        # aici if/switch
         if packet_type == 'CONNECT':
+            ConnectPacket(client).decode(data[0:])
             connack = ConnackPacket(client)
             connackData = connack.encode()
             client.conn.sendall(connackData)
 
+        if packet_type == 'SUBSCRIBE':
+            SubscribePacket(client).decode(data[0:])
+
     def handle_clients(self):
-        # de vazut aici cu select din os, cum face profu
         while self.state:
-            for client in self.clients:
+            if len(self.clients) == 0:
+                continue
+            to_read, _, _ = select.select(self.clients, [], [], 1)
+            for client in to_read:
+                self.printLog(f'{client.addr} a trimis un pachet')
                 data = client.conn.recv(1024)
-                data_decoded = data.decode(encoding='ascii')
-                self.printLog(f'{client.addr} a trimis {data_decoded}')
-                # Daca functia recv returneaza None, clientul a inchis conexiunea
-                if data_decoded == 'disc':
-                    client.connected = False
-                    self.printLog(f'Client {client.addr} disconnected')
-                    self.clients.remove(client)
-                    client.conn.close()
-                else:
-                    self.handleClient(data, client)
-            # print(addr, ' a trimis: ', data)
+
+                while len(data) > 0:
+                    binary = format(int.from_bytes(data[0:1], "big"), '#010b')[2:]
+                    packet_type = int(binary[0:4], 2)
+                    packet_type = packet_types_to_string[packet_type]
+                    flags = binary[4:]
+                    print(packet_type)
+
+                    var_length, remaining_length = decodeVariableInt(data[1:])
+                    curr_pack = data[1 + var_length: 1 + var_length + remaining_length]
+                    data = data[1 + var_length + remaining_length:]
+                    #print(remaining_length, len(curr_pack), len(data))
+                    self.handleClient(curr_pack, client, packet_type)

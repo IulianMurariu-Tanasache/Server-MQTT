@@ -24,7 +24,7 @@ packet_types_to_string = dict(zip(packet_types_to_int.values(), packet_types_to_
 
 def decodeUTF8(data):
     length = struct.unpack('!H', data[0:2])
-    return length, struct.unpack(f'!{length[0]}s', data[2: 2 + length[0]])
+    return length[0], struct.unpack(f'!{length[0]}s', data[2: 2 + length[0]])[0].decode(encoding='utf-8')
 
 
 def decodeVariableInt(byte):
