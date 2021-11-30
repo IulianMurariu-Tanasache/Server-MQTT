@@ -3,7 +3,7 @@ from tkinter.ttk import Treeview
 from Server import *
 
 # !!!!!!!!!!!!
-# Am trecut pe versuine 3.1.1 de MQTT momentant
+# Am trecut pe versiune 3.1.1 de MQTT momentant
 # !!!!!!!!!!!!
 # TODO:
 #   -clase separate pentru fiecare pachet si mosteneste packet
