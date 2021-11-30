@@ -18,6 +18,8 @@ topics = {
     'topic3': []
 }
 
+#lol
+
 selected_client = None
 selected_topic = None
 
