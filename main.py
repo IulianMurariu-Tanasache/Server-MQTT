@@ -5,6 +5,8 @@ from Server import *
 
 topics = {}
 
+#lol
+
 selected_client = None
 selected_topic = None
 
