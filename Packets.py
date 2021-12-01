@@ -1,3 +1,5 @@
+import struct
+
 from HelperFunctions import *
 import functools as fct
 
@@ -9,7 +11,7 @@ class Packet:
     def decode(self, data):
         pass
 
-    def encode(self):
+    def encode(self, data):
         pass
 
 
@@ -78,6 +80,12 @@ class ConnectPacket(Packet):
             print(self.client.password)
             payload_data = payload_data[pass_len + 2:]
 
+        # if keep_alive:
+        #     keep_len, self.client.keepAlive = decodeUTF8(payload_data[0:])
+        #     self.client.keepAlive = self.client.keepAlive
+        #     print(self.client.keepAlive)
+        #     payload_data = payload_data[keep_len + 2:]
+
         self.client.connected = True
 
 
@@ -86,7 +94,7 @@ class ConnackPacket(Packet):
     def __init__(self, client):
         super().__init__(client)
 
-    def encode(self):
+    def encode(self, data):
         fixedHeader = struct.pack('!BB', 32, 2)
 
         # sp daca are deja sesiune sau nu
@@ -123,3 +131,128 @@ class SubscribePacket(Packet):
 
             self.client.topics.append((topic, qos))
             print(topic, qos)
+
+
+class PublishPacket(Packet):
+    def __init__(self, client):
+        super().__init__(client)
+
+    def decode(self, data):
+        remaining_length = len(data)
+        payload_data = data[0:]
+        len_topic, topic_name = decodeUTF8(payload_data)
+        payload_data = payload_data[len_topic + 2:]
+
+        len_payload = 4 + len_topic - remaining_length
+
+        #Packet.packet_indentifer = struct.unpack('!H', data[5:7])
+
+        msgpayload = data[7:7 + len_payload]
+        msgpayload = msgpayload.decode(encoding='utf-8')#struct.unpack(f'!{len_payload}s', msgpayload)
+        print(topic_name, msgpayload)
+
+        # if self.client.willQoS == '00':
+        #     pass
+        # if self.client.willQoS == '01':
+        #     PubackPacket(Packet)
+        # if self.client.willQoS == '10':
+        #     return PubrecPacket(Packet)
+#cumva pe interfata
+
+
+class PubackPacket(Packet):
+    def __init__(self, client):
+        super().__init__(client)
+
+    def encode(self, data):
+        fixHeader = struct.pack('!BB', 64, 2)
+
+        varheader = struct.pack('!H', data)#nu se stie ce aere
+
+        header = b''.join([fixHeader, varheader])
+        return header
+
+
+class PubrecPacket(Packet):
+    def __init__(self, client):
+        super().__init__(client)
+
+    def encode(self, data):
+        fixHeader = struct.pack('!BB', 80, 2)
+
+        varheader = struct.pack('!BB', 0, 0)#idnet variable?
+
+        header = b''.join([fixHeader, varheader])
+        return header
+
+
+class PubrelPacket(Packet):
+    def __init__(self, client):
+        super().__init__(client)
+
+    def encode(self, data):
+        fixHeader = struct.pack('!BB', 98, 2)
+
+        varheader = struct.pack('!BB', 0, 0)  # idnet variable?
+
+        header = b''.join([fixHeader, varheader])
+        return header
+
+
+class PubcompPacket(Packet):
+    def __init__(self, client):
+        super().__init__(client)
+
+    def encode(self, data):
+        fixHeader = struct.pack('!BB', 112, 2)
+
+        varheader = struct.pack('!BB', 0, 0)  # idnet variable?
+
+        header = b''.join([fixHeader, varheader])
+        return header
+
+
+class UnsubscribePacket(Packet):
+    def __init__(self, client):
+        super().__init__(client)
+
+    def decode(self, data):
+        pass
+
+
+class SubackPacket(Packet):
+    def __init__(self, client):
+        super().__init__(client)
+
+    def encode(self, data):
+        pass
+
+
+class UnSubackPacket(Packet):
+    def __init__(self, client):
+        super().__init__(client)
+
+    def encode(self, data):
+        pass
+
+
+class PingReqPacket(Packet):
+    def __init__(self, client):
+        super().__init__(client)
+
+    def decode(self, data):
+        pass
+
+
+class PingRespPacket(Packet):
+    def __init__(self, client):
+        super().__init__(client)
+
+    def encode(self, data):
+        pass
+
+class Disconnect(Packet):
+    def __init__(self, client):
+        super().__init__(client)
+    def decode(self, data):
+        pass

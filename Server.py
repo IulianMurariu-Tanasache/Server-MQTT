@@ -89,11 +89,21 @@ class Server:
         if packet_type == 'CONNECT':
             ConnectPacket(client).decode(data[0:])
             connack = ConnackPacket(client)
-            connackData = connack.encode()
+            connackData = connack.encode(None)
             client.conn.sendall(connackData)
 
         if packet_type == 'SUBSCRIBE':
             SubscribePacket(client).decode(data[0:])
+
+        if packet_type == 'PUBLISH':
+            publish = PublishPacket(client)
+            publish.decode(data[0:])
+
+            puback = PubackPacket(client)
+            #pubackData = puback.encode(publish.packet_indentifer)
+            # client.conn.sendall(pubackData)
+        if packet_type == 'DISCONNECT':
+            client.conn = None#am inchis conexiune? si acum Will mesage?
 
     def handle_clients(self):
         while self.state:
