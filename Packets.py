@@ -3,6 +3,15 @@ import struct
 from HelperFunctions import *
 import functools as fct
 
+# de mutat in server
+sessions = []
+
+
+class Session:
+    def __init__(self, _id, topics):
+        self.client_id = _id
+        self.topics = topics
+
 
 class Packet:
     def __init__(self, client):
@@ -16,14 +25,14 @@ class Packet:
 
 
 class ConnectPacket(Packet):
-    def __init__(self, client):
+    def __init__(self, client, clients):
         super().__init__(client)
+        self.clients = clients
 
     def decode(self, data):
         prot_len, protocol_name, prot_version, conn_flags, keep_alive = struct.unpack('!H4sBcH', data[0:10])
 
         protocol_name = protocol_name.decode(encoding='utf-8')
-        # connect_flags = format(ord(conn_flags.decode(encoding='ascii')), '#010b')[2:]
         connect_flags = bin(int.from_bytes(conn_flags, 'big')).lstrip('0b')
 
         # print(protocol_name)
@@ -51,14 +60,14 @@ class ConnectPacket(Packet):
         username = connect_flags[0] == '1'
         self.client.keepAlive = keep_alive
 
-        # chestii de versiune 5.0
-        # var_length, property_length = decodeVariableInt(data[10:])
-        # properties_data = data[10 + var_length: 10 + var_length + property_length]
-        # properties = struct.unpack('!', properties_data)
-
         payload_data = data[10:]
         id_len, self.client.id = decodeUTF8(payload_data)
         payload_data = payload_data[2 + id_len:]
+
+        for c in self.clients:
+            if self.client.id == c.id and self.client != c:
+                c.conn.shutdown(2)
+                c.conn.close()
 
         if self.client.will:
             wt_len, self.client.willTopic = decodeUTF8(payload_data[0:])
@@ -80,11 +89,19 @@ class ConnectPacket(Packet):
             print(self.client.password)
             payload_data = payload_data[pass_len + 2:]
 
-        # if keep_alive:
-        #     keep_len, self.client.keepAlive = decodeUTF8(payload_data[0:])
-        #     self.client.keepAlive = self.client.keepAlive
-        #     print(self.client.keepAlive)
-        #     payload_data = payload_data[keep_len + 2:]
+        if clean_start:
+            [sessions.remove(s) for s in sessions if s.id == self.client.id]
+            sessions.append(Session(self.client.id, []))
+            self.sessionPresent = False
+        else:
+            exists = False
+            for s in sessions:
+                if s.id == self.client.id:
+                    exists = True
+                    self.client.topics = s.topics
+            if not exists:
+                sessions.append(Session(self.client.id, []))
+            self.sessionPresent = exists
 
         self.client.connected = True
 
@@ -98,7 +115,7 @@ class ConnackPacket(Packet):
         fixedHeader = struct.pack('!BB', 32, 2)
 
         # sp daca are deja sesiune sau nu
-        varHeader = struct.pack('!BB', 0, 0)
+        varHeader = struct.pack('!BB', data, 0)
 
         header = b''.join([fixedHeader, varHeader])
         return header
@@ -129,7 +146,7 @@ class SubscribePacket(Packet):
             # if qos > 2 -> malformed packet
             curr += 1
 
-            self.client.topics.append((topic, qos))
+            self.client.topics.append(topic)
             print(topic, qos)
 
 
@@ -144,13 +161,14 @@ class PublishPacket(Packet):
 
         start_payload = len_topic + 2
 
-        #Packet.packet_indentifer = struct.unpack('!H', data[5:7])
+        # Packet.packet_indentifer = struct.unpack('!H', data[5:7])
 
         msgpayload = data[start_payload:remaining_length]
-        msgpayload = msgpayload.decode(encoding='utf-8')#struct.unpack(f'!{len_payload}s', msgpayload)
+        msgpayload = msgpayload.decode(encoding='utf-8')  # struct.unpack(f'!{len_payload}s', msgpayload)
         print(topic_name, msgpayload)
 
-#cumva pe interfata
+
+# cumva pe interfata
 
 
 class PubackPacket(Packet):
@@ -160,7 +178,7 @@ class PubackPacket(Packet):
     def encode(self, data):
         fixHeader = struct.pack('!BB', 64, 2)
 
-        varheader = struct.pack('!H', data)#nu se stie ce aere
+        varheader = struct.pack('!H', data)  # nu se stie ce aere
 
         header = b''.join([fixHeader, varheader])
         return header
@@ -173,7 +191,7 @@ class PubrecPacket(Packet):
     def encode(self, data):
         fixHeader = struct.pack('!BB', 80, 2)
 
-        varheader = struct.pack('!BB', 0, 0)#idnet variable?
+        varheader = struct.pack('!BB', 0, 0)  # idnet variable?
 
         header = b''.join([fixHeader, varheader])
         return header
@@ -183,7 +201,7 @@ class PubrelPacket(Packet):
     def __init__(self, client):
         super().__init__(client)
 
-    def encode(self, data): #asta era dee decodat
+    def encode(self, data):  # asta era dee decodat
         fixHeader = struct.pack('!BB', 98, 2)
 
         varheader = struct.pack('!BB', 0, 0)  # idnet variable?
@@ -213,7 +231,7 @@ class UnsubscribePacket(Packet):
         pass
 
 
-class SubackPacket(Packet): #encode
+class SubackPacket(Packet):  # encode
     def __init__(self, client):
         super().__init__(client)
 
@@ -221,7 +239,7 @@ class SubackPacket(Packet): #encode
         pass
 
 
-class UnSubackPacket(Packet): # encode
+class UnSubackPacket(Packet):  # encode
     def __init__(self, client):
         super().__init__(client)
 
@@ -243,6 +261,7 @@ class PingRespPacket(Packet):
 
     def encode(self, data):
         pass
+
 
 class Disconnect(Packet):
     def __init__(self, client):

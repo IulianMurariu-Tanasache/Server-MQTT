@@ -5,11 +5,6 @@ import traceback
 from Packets import *
 
 
-class Session:
-    def __init__(self):
-        pass
-
-
 class Client:
     def __init__(self, conn, addr):
         self.conn = conn
@@ -30,7 +25,7 @@ class Client:
 
 
 class Server:
-    def __init__(self, logBox, logs):
+    def __init__(self, logBox, logs, trv):
         self.state = False
         self.logBox = logBox
         self.logs = logs
@@ -38,6 +33,8 @@ class Server:
         self.ip = '127.0.0.1'
         self.socket = None
         self.clients = []
+        self.topics = {}
+        self.trv = trv
 
     def printLog(self, log):
         self.logs.insert(0, log)
@@ -87,13 +84,21 @@ class Server:
     def handleClient(self, data, client, packet_type):
         # aici if/switch
         if packet_type == 'CONNECT':
-            ConnectPacket(client).decode(data[0:])
+            conPack = ConnectPacket(client, self.clients)
+            conPack.decode(data[0:])
             connack = ConnackPacket(client)
-            connackData = connack.encode(None)
+            connackData = connack.encode(conPack.sessionPresent)
             client.conn.sendall(connackData)
 
         if packet_type == 'SUBSCRIBE':
             SubscribePacket(client).decode(data[0:])
+            for t in client.topics:
+                if t not in self.topics.keys():
+                    self.topics[t] = [client.addr]
+                else:
+                    if client.addr not in self.topics[t]:
+                        self.topics[t].append(client.addr)
+            self.trv.event_generate("<<Subscribe>>")
 
         if packet_type == 'PUBLISH':
             publish = PublishPacket(client)
@@ -124,5 +129,4 @@ class Server:
                     var_length, remaining_length = decodeVariableInt(data[1:])
                     curr_pack = data[1 + var_length: 1 + var_length + remaining_length]
                     data = data[1 + var_length + remaining_length:]
-                    #print(remaining_length, len(curr_pack), len(data[0:]))
                     self.handleClient(curr_pack, client, packet_type)

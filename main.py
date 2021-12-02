@@ -1,5 +1,5 @@
 from tkinter import *
-from  tkinter.ttk import Treeview
+from tkinter.ttk import Treeview
 from Server import *
 
 # !!!!!!!!!!!!
@@ -17,6 +17,8 @@ from Server import *
 #     'topic3': []
 # }
 
+topics = {}
+
 selected_client = None
 selected_topic = None
 
@@ -24,7 +26,7 @@ selected_topic = None
 def select_item(event):
     global selected_topic
     x, y = event.x, event.y
-    #print(x, y)
+    # print(x, y)
     if y < 25:
         return
     # select doar topicuri(0,25 ->200,25); h = 45
@@ -114,17 +116,23 @@ def main():
     trv.heading('clienti', text='Clients')
     trv.heading('optiuni', text='Options')
 
-    server = Server(logBox, logsList)
+    server = Server(logBox, logsList, trv)
 
     # generat random data
     button1 = Button(root, text='Start', activebackground="green", width=20, command=server.start).place(x=80, y=690)
     button2 = Button(root, text='Stop', activebackground="red", width=20, command=server.stop).place(x=250, y=690)
     button3 = Button(root, text='Configurare', activebackground="orange", width=20, command=NewMenu).place(x=420, y=690)
 
-    for topic in topics:
-        trv.insert('', END, values=(topic, '', ''))
+    def onSub(event):
+        global topics
+        topics = server.topics
+        print(topics)
+        trv.delete(*trv.get_children())
+        for topic in topics:
+            trv.insert('', END, values=(topic, '', ''))
 
     trv.bind('<ButtonRelease-1>', select_item)
+    trv.bind('<<Subscribe>>', onSub)
     trv.grid(row=0, column=0, sticky='nsew')
 
     # add scroll
