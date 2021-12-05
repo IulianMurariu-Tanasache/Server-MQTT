@@ -3,8 +3,8 @@ import struct
 from HelperFunctions import *
 import functools as fct
 
+
 # de mutat in server
-sessions = []
 
 
 class Session:
@@ -25,9 +25,10 @@ class Packet:
 
 
 class ConnectPacket(Packet):
-    def __init__(self, client, clients):
+    def __init__(self, client, clients, sessions):
         super().__init__(client)
         self.clients = clients
+        self.sessions = sessions
 
     def decode(self, data):
         prot_len, protocol_name, prot_version, conn_flags, keep_alive = struct.unpack('!H4sBcH', data[0:10])
@@ -90,17 +91,17 @@ class ConnectPacket(Packet):
             payload_data = payload_data[pass_len + 2:]
 
         if clean_start:
-            [sessions.remove(s) for s in sessions if s.id == self.client.id]
-            sessions.append(Session(self.client.id, []))
+            [self.sessions.remove(s) for s in self.sessions if s.client_id == self.client.id]
+            self.sessions.append(Session(self.client.id, []))
             self.sessionPresent = False
         else:
             exists = False
-            for s in sessions:
-                if s.id == self.client.id:
+            for s in self.sessions:
+                if s.client_id == self.client.id:
                     exists = True
                     self.client.topics = s.topics
             if not exists:
-                sessions.append(Session(self.client.id, []))
+                self.sessions.append(Session(self.client.id, []))
             self.sessionPresent = exists
 
         self.client.connected = True
@@ -165,6 +166,8 @@ class PublishPacket(Packet):
 
         msgpayload = data[start_payload:remaining_length]
         msgpayload = msgpayload.decode(encoding='utf-8')  # struct.unpack(f'!{len_payload}s', msgpayload)
+        self.topic = topic_name
+        self.msg = msgpayload
         print(topic_name, msgpayload)
 
 

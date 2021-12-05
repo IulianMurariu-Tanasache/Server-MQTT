@@ -1,9 +1,10 @@
+import tkinter.ttk
 from tkinter import *
 from tkinter.ttk import Treeview
 from Server import *
 
 # !!!!!!!!!!!!
-# Am trecut pe versiune 3.1.1 de MQTT momentant
+# Am trecut pe versiune 3.1.1 de MQTT
 # !!!!!!!!!!!!
 # TODO:
 #   -clase separate pentru fiecare pachet si mosteneste packet
@@ -35,9 +36,13 @@ def select_item(event):
         selected = tree.focus()
         selected_topic = tree.item(selected)['values'][0]
         record = tree.item(selected)['values'][0]
+        record = record.strip()
+        record = record.replace('/','')
         if record == '':
             return
-        # print(tree.item(tree.get_children()[0]))
+        elif type(topics[record]) is dict:
+            tree.item(selected, open=True)
+            return
         for i in range(0, len(tree.get_children())):
             # item = tree.item(child)
             child = tree.get_children()[i]
@@ -78,7 +83,7 @@ def main():
 
     # listbox
     logsList = Listbox(root, width=47, height=10, relief="raised", font=('Tahoma', 10))
-    logsList.place(x=622, y=30)
+    logsList.place(x=632, y=30)
     logBox = Listbox(root, relief="raised", width=125, height=2, font=('Tahoma', 14))
     logBox.insert(0, "AFISAT DE LA SERVER\n")
     logBox.place(x=0, y=600)
@@ -123,13 +128,22 @@ def main():
     button2 = Button(root, text='Stop', activebackground="red", width=20, command=server.stop).place(x=250, y=690)
     button3 = Button(root, text='Configurare', activebackground="orange", width=20, command=NewMenu).place(x=420, y=690)
 
+    def dfsDict(dic, key, id, indent):
+        if type(dic) is not dict:
+            return
+        for keys in dic.keys():
+            id = id + key
+            name = ' ' * 2 * indent + keys
+            if type(dic[keys]) is dict:
+                name = name + '/'
+            trv.insert(id, END, iid=id + keys, values=(name, '', ''))
+            dfsDict(dic[keys], keys, id, indent + 1)
+
     def onSub(event):
         global topics
         topics = server.topics
-        print(topics)
         trv.delete(*trv.get_children())
-        for topic in topics:
-            trv.insert('', END, values=(topic, '', ''))
+        dfsDict(topics, '', '', 0)
 
     trv.bind('<ButtonRelease-1>', select_item)
     trv.bind('<<Subscribe>>', onSub)

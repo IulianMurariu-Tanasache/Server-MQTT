@@ -35,6 +35,7 @@ class Server:
         self.clients = []
         self.topics = {}
         self.trv = trv
+        self.sessions = []
 
     def printLog(self, log):
         self.logs.insert(0, log)
@@ -84,7 +85,7 @@ class Server:
     def handleClient(self, data, client, packet_type):
         # aici if/switch
         if packet_type == 'CONNECT':
-            conPack = ConnectPacket(client, self.clients)
+            conPack = ConnectPacket(client, self.clients, self.sessions)
             conPack.decode(data[0:])
             connack = ConnackPacket(client)
             connackData = connack.encode(conPack.sessionPresent)
@@ -93,11 +94,23 @@ class Server:
         if packet_type == 'SUBSCRIBE':
             SubscribePacket(client).decode(data[0:])
             for t in client.topics:
-                if t not in self.topics.keys():
-                    self.topics[t] = [client.addr]
+                #wildcards
+                topic = t
+                level = t
+                currdic = self.topics
+                while topic.find('/') != -1:
+                    level = topic[0:topic.find('/')]
+                    topic = topic[topic.find('/') + 1:]
+                    if level not in currdic.keys():
+                        currdic[level] = {}
+                    currdic = currdic[level]
+
+                level = topic
+                if level not in currdic.keys():
+                    currdic[level] = [client.addr]
                 else:
-                    if client.addr not in self.topics[t]:
-                        self.topics[t].append(client.addr)
+                    if client.addr not in currdic[level]:
+                        currdic[level].append(client.addr)
             self.trv.event_generate("<<Subscribe>>")
 
         if packet_type == 'PUBLISH':
