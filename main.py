@@ -11,13 +11,6 @@ from Server import *
 #   -pack()/unpack() cu struct
 #   -imlpementare un switch/multe if-uri care sa aleaga ce pachet sa fie decodat/encodat in handleClient
 
-
-# topics = {
-#     'topic1': ['client1', 'client4', 'client5', 'client6'],
-#     'topic2': ['client2', 'client3'],
-#     'topic3': []
-# }
-
 topics = {}
 
 selected_client = None
@@ -27,34 +20,36 @@ selected_topic = None
 def select_item(event):
     global selected_topic
     x, y = event.x, event.y
-    # print(x, y)
     if y < 25:
         return
     # select doar topicuri(0,25 ->200,25); h = 45
     if 0 <= x <= 200:
         tree = event.widget
         selected = tree.focus()
-        selected_topic = tree.item(selected)['values'][0]
-        record = tree.item(selected)['values'][0]
-        record = record.strip()
-        record = record.replace('/','')
-        if record == '':
+        selected_topic = selected[1:]
+        if selected_topic == '':
             return
-        elif type(topics[record]) is dict:
+        lvl = selected_topic
+        dic = topics
+        while '/' in lvl:
+            dic = dic[lvl[0:lvl.find('/')]]
+            lvl = lvl[lvl.find('/') + 1:]
+        record = dic[lvl]
+        if type(record) is dict:
             tree.item(selected, open=True)
+            for i in range(0, len(tree.get_children())):
+                child = tree.get_children()[i]
+                tree.set(child, 'clienti', '')
             return
         for i in range(0, len(tree.get_children())):
-            # item = tree.item(child)
             child = tree.get_children()[i]
-            if i < len(topics[record]):
-                tree.set(child, 'clienti', topics[record][i])
-                # tree.set(child, 'optiuni', 'disconnect')
+            if i < len(record):
+                tree.set(child, 'clienti', record[i])
             else:
                 tree.set(child, 'clienti', '')
-                # tree.set(child, 'optiuni', '')
-        remaining = len(topics[record]) - len(tree.get_children())
+        remaining = len(record) - len(tree.get_children())
         for i in range(0, remaining):
-            tree.insert('', END, values=('', topics[record][len(tree.get_children()) + i], ''))
+            tree.insert('', END, values=('', record[len(tree.get_children()) + i], ''))
 
 
 def NewMenu():
@@ -83,7 +78,7 @@ def main():
 
     # listbox
     logsList = Listbox(root, width=47, height=10, relief="raised", font=('Tahoma', 10))
-    logsList.place(x=632, y=30)
+    logsList.place(x=622, y=30)
     logBox = Listbox(root, relief="raised", width=125, height=2, font=('Tahoma', 14))
     logBox.insert(0, "AFISAT DE LA SERVER\n")
     logBox.place(x=0, y=600)
@@ -102,7 +97,6 @@ def main():
             return
         try:
             # select doar clienti(201,25->400,25)
-
             tree = event.widget
             # select row under mouse
             iid = tree.identify_row(event.y)
@@ -128,22 +122,21 @@ def main():
     button2 = Button(root, text='Stop', activebackground="red", width=20, command=server.stop).place(x=250, y=690)
     button3 = Button(root, text='Configurare', activebackground="orange", width=20, command=NewMenu).place(x=420, y=690)
 
-    def dfsDict(dic, key, id, indent):
+    def dfsDict(dic, pid, indent):
         if type(dic) is not dict:
             return
-        for keys in dic.keys():
-            id = id + key
-            name = ' ' * 2 * indent + keys
-            if type(dic[keys]) is dict:
+        for _keys in dic.keys():
+            name = ' ' * 2 * indent + str(_keys)
+            if type(dic[_keys]) is dict:
                 name = name + '/'
-            trv.insert(id, END, iid=id + keys, values=(name, '', ''))
-            dfsDict(dic[keys], keys, id, indent + 1)
+            trv.insert(pid, END, iid=pid + '/' + str(_keys), values=(name, '', ''))
+            dfsDict(dic[_keys], pid + '/' + str(_keys), indent + 1)
 
     def onSub(event):
         global topics
         topics = server.topics
         trv.delete(*trv.get_children())
-        dfsDict(topics, '', '', 0)
+        dfsDict(topics, '', 0)
 
     trv.bind('<ButtonRelease-1>', select_item)
     trv.bind('<<Subscribe>>', onSub)

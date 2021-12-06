@@ -30,12 +30,13 @@ class Server:
         self.logBox = logBox
         self.logs = logs
         self.port = 1883
-        self.ip = '127.0.0.1'
+        self.ip = '127.0.0.1' #socket.gethostbyname(socket.gethostname())
         self.socket = None
         self.clients = []
         self.topics = {}
         self.trv = trv
         self.sessions = []
+        self.packet_ids = []
 
     def printLog(self, log):
         self.logs.insert(0, log)
@@ -82,30 +83,31 @@ class Server:
         self.handleClientsThread.join()
         self.printLog('Stopping server...')
 
-    def handleClient(self, data, client, packet_type):
+    def handleClient(self, data, client, packet_type, flags):
         # aici if/switch
         if packet_type == 'CONNECT':
             conPack = ConnectPacket(client, self.clients, self.sessions)
-            conPack.decode(data[0:])
+            conPack.decode(data[0:], flags)
             connack = ConnackPacket(client)
             connackData = connack.encode(conPack.sessionPresent)
             client.conn.sendall(connackData)
 
         if packet_type == 'SUBSCRIBE':
-            SubscribePacket(client).decode(data[0:])
+            sub = SubscribePacket(client)
+            sub.decode(data[0:], flags)
             for t in client.topics:
                 #wildcards
                 topic = t
                 level = t
                 currdic = self.topics
                 while topic.find('/') != -1:
-                    level = topic[0:topic.find('/')]
-                    topic = topic[topic.find('/') + 1:]
+                    level = str(topic[0:topic.find('/')])
+                    topic = str(topic[topic.find('/') + 1:])
                     if level not in currdic.keys():
                         currdic[level] = {}
                     currdic = currdic[level]
 
-                level = topic
+                level = str(topic)
                 if level not in currdic.keys():
                     currdic[level] = [client.addr]
                 else:
@@ -113,13 +115,27 @@ class Server:
                         currdic[level].append(client.addr)
             self.trv.event_generate("<<Subscribe>>")
 
+            suback = SubackPacket(client)
+            subackData = suback.encode((2, sub.packet_id))
+            client.conn.sendall(subackData)
+
         if packet_type == 'PUBLISH':
             publish = PublishPacket(client)
-            publish.decode(data[0:])
+            publish.decode(data[0:], flags)
+            self.packet_ids.append(publish.packet_identifier)
+            #forward la ceilalti clienti
+            self.packet_ids.remove(publish.packet_identifier)
 
-            # puback = PubackPacket(client)
-            # pubackData = puback.encode(publish.packet_indentifer)
-            # client.conn.sendall(pubackData)
+            if publish.qos == 1:
+                puback = PubackPacket(client)
+                pubackData = puback.encode(publish.packet_identifier)
+                client.conn.sendall(pubackData)
+
+            if publish.qos == 2:
+                pubrec = PubrecPacket(client)
+                pubrecData = pubrec.encode(publish.packet_identifier)
+                client.conn.sendall(pubrecData)
+
         if packet_type == 'DISCONNECT':
             client.conn = None  # am inchis conexiune? si acum Will mesage?
 
@@ -142,4 +158,4 @@ class Server:
                     var_length, remaining_length = decodeVariableInt(data[1:])
                     curr_pack = data[1 + var_length: 1 + var_length + remaining_length]
                     data = data[1 + var_length + remaining_length:]
-                    self.handleClient(curr_pack, client, packet_type)
+                    self.handleClient(curr_pack, client, packet_type, flags)

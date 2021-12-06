@@ -17,7 +17,7 @@ class Packet:
     def __init__(self, client):
         self.client = client
 
-    def decode(self, data):
+    def decode(self, data, flags):
         pass
 
     def encode(self, data):
@@ -30,7 +30,8 @@ class ConnectPacket(Packet):
         self.clients = clients
         self.sessions = sessions
 
-    def decode(self, data):
+    def decode(self, data, flags):
+        #flags?
         prot_len, protocol_name, prot_version, conn_flags, keep_alive = struct.unpack('!H4sBcH', data[0:10])
 
         protocol_name = protocol_name.decode(encoding='utf-8')
@@ -126,8 +127,8 @@ class SubscribePacket(Packet):
     def __init__(self, client):
         super().__init__(client)
 
-    def decode(self, data):
-        packet_id, = struct.unpack('!H', data[0:2])
+    def decode(self, data, flags):
+        self.packet_id, = struct.unpack('!H', data[0:2])
         payload_data = data[2:]
         # pachet_id e pentru a nu prelucra acelasi pachet de prea multe ori la QoS
 
@@ -155,17 +156,24 @@ class PublishPacket(Packet):
     def __init__(self, client):
         super().__init__(client)
 
-    def decode(self, data):
+    def decode(self, data, flags):
+        self.retain = flags[3]
+        self.dup = flags[0]
+        self.qos = int(flags[1:3], 2)
+        self.packet_identifier = 0
+
         remaining_length = len(data)
         payload_data = data[0:]
         len_topic, topic_name = decodeUTF8(payload_data)
 
         start_payload = len_topic + 2
 
-        # Packet.packet_indentifer = struct.unpack('!H', data[5:7])
+        if self.qos > 0:
+            self.packet_identifier = struct.unpack('!H', data[2 + len_topic:2 + len_topic + 2])[0]
+            start_payload += 2
 
         msgpayload = data[start_payload:remaining_length]
-        msgpayload = msgpayload.decode(encoding='utf-8')  # struct.unpack(f'!{len_payload}s', msgpayload)
+        msgpayload = msgpayload.decode(encoding='ascii')
         self.topic = topic_name
         self.msg = msgpayload
         print(topic_name, msgpayload)
@@ -230,7 +238,7 @@ class UnsubscribePacket(Packet):
     def __init__(self, client):
         super().__init__(client)
 
-    def decode(self, data):
+    def decode(self, data, flags):
         pass
 
 
@@ -239,7 +247,16 @@ class SubackPacket(Packet):  # encode
         super().__init__(client)
 
     def encode(self, data):
-        pass
+        #data - > (packet_id, qos)
+        fixHeader = struct.pack('!BB', 144, 3)
+
+        varheader = struct.pack('!H', data[0])
+
+        #failure?
+        payload = struct.pack('!H', data[1])
+
+        header = b''.join([fixHeader, varheader, payload])
+        return header
 
 
 class UnSubackPacket(Packet):  # encode
@@ -254,7 +271,7 @@ class PingReqPacket(Packet):
     def __init__(self, client):
         super().__init__(client)
 
-    def decode(self, data):
+    def decode(self, data, flags):
         pass
 
 
@@ -270,5 +287,5 @@ class Disconnect(Packet):
     def __init__(self, client):
         super().__init__(client)
 
-    def decode(self, data):
+    def decode(self, data, flags):
         pass
