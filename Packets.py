@@ -4,9 +4,6 @@ from HelperFunctions import *
 import functools as fct
 
 
-# de mutat in server
-
-
 class Session:
     def __init__(self, _id, topics):
         self.client_id = _id
@@ -29,26 +26,28 @@ class ConnectPacket(Packet):
         super().__init__(client)
         self.clients = clients
         self.sessions = sessions
+        self.connCode = 0
 
     def decode(self, data, flags):
-        #flags?
-        prot_len, protocol_name, prot_version, conn_flags, keep_alive = struct.unpack('!H4sBcH', data[0:10])
+        if self.client.connected is True or int(flags, 2) != 0:
+            self.client.toDC = True
+            return
 
+        prot_len, protocol_name, prot_version, conn_flags, keep_alive = struct.unpack('!H4sBcH', data[0:10])
         protocol_name = protocol_name.decode(encoding='utf-8')
         connect_flags = bin(int.from_bytes(conn_flags, 'big')).lstrip('0b')
 
-        # print(protocol_name)
-        # print(prot_version)
-        # print(keep_alive)
-
         if protocol_name != 'MQTT' or prot_version != 4:
             print('Eroare conectare1')
+            self.client.toDC = True
+            self.connCode = 1
             return
 
         reserved = connect_flags[7] == '1'
-        print(reserved, connect_flags[0], connect_flags, connect_flags[1])
+        # print(reserved, connect_flags[0], connect_flags, connect_flags[1])
 
         if reserved:
+            self.client.toDC = True
             print('Eroare conectare2')
             return
 
@@ -68,17 +67,30 @@ class ConnectPacket(Packet):
 
         for c in self.clients:
             if self.client.id == c.id and self.client != c:
-                c.conn.shutdown(2)
-                c.conn.close()
+                self.client.toDC = True
+
+        self.sessionPresent = False
+        if clean_start:
+            [self.sessions.remove(s) for s in self.sessions if s.client_id == self.client.id]
+            self.sessions.append(Session(self.client.id, []))
+        else:
+            exists = False
+            for s in self.sessions:
+                if s.client_id == self.client.id:
+                    exists = True
+                    self.client.topics = s.topics
+            if not exists:
+                self.sessions.append(Session(self.client.id, []))
+            self.sessionPresent = exists
 
         if self.client.will:
             wt_len, self.client.willTopic = decodeUTF8(payload_data[0:])
             msg_len = struct.unpack('!H', payload_data[2 + wt_len:2 + wt_len + 2])[0]
-            msg = struct.unpack(f'!{msg_len}s', payload_data[wt_len + 2 + 2:wt_len + 2 + 2 + msg_len])[0]
+            self.client.willMsg = struct.unpack(f'!{msg_len}s', payload_data[wt_len + 2 + 2:wt_len + 2 + 2 + msg_len])[
+                0]
             payload_data = payload_data[wt_len + 2 + 2 + msg_len:]
-            print(msg)
+            print(self.client.willMsg)
 
-        # de implementat user si parola si restul
         if username:
             user_len, self.client.user = decodeUTF8(payload_data[0:])
             self.client.user = self.client.user
@@ -91,20 +103,6 @@ class ConnectPacket(Packet):
             print(self.client.password)
             payload_data = payload_data[pass_len + 2:]
 
-        if clean_start:
-            [self.sessions.remove(s) for s in self.sessions if s.client_id == self.client.id]
-            self.sessions.append(Session(self.client.id, []))
-            self.sessionPresent = False
-        else:
-            exists = False
-            for s in self.sessions:
-                if s.client_id == self.client.id:
-                    exists = True
-                    self.client.topics = s.topics
-            if not exists:
-                self.sessions.append(Session(self.client.id, []))
-            self.sessionPresent = exists
-
         self.client.connected = True
 
 
@@ -116,8 +114,10 @@ class ConnackPacket(Packet):
     def encode(self, data):
         fixedHeader = struct.pack('!BB', 32, 2)
 
-        # sp daca are deja sesiune sau nu
-        varHeader = struct.pack('!BB', data, 0)
+        # data = (sp,conn return code)
+        sp = data[0]
+        connCode = data[1]
+        varHeader = struct.pack('!BB', 0 if connCode != 0 else sp, connCode)
 
         header = b''.join([fixedHeader, varHeader])
         return header
@@ -127,7 +127,25 @@ class SubscribePacket(Packet):
     def __init__(self, client):
         super().__init__(client)
 
+    def checkTopicFilter(self, t):
+        topic = t
+        level = t
+        if t == '+':
+            return False
+        while topic.find('/') != -1:
+            level = str(topic[0:topic.find('/')])
+            topic = str(topic[topic.find('/') + 1:])
+            if level == '' or level == '#' or any(x in ['#', '+'] for x in level):
+                return False
+        level = str(topic)
+        return True
+
     def decode(self, data, flags):
+
+        if int(flags, 2) != 2:
+            self.client.toDC = True
+            return
+
         self.packet_id, = struct.unpack('!H', data[0:2])
         payload_data = data[2:]
         # pachet_id e pentru a nu prelucra acelasi pachet de prea multe ori la QoS
@@ -135,18 +153,21 @@ class SubscribePacket(Packet):
         # if data is gol -> protocol violation
         payload_len = len(payload_data)
         curr = 0
+        self.retCode = 0
 
         while curr < payload_len:
             topic_len, topic = decodeUTF8(payload_data[curr:])
             curr += 2 + topic_len
             qos_byte = format(int.from_bytes(payload_data[curr:curr + 1], 'big'), '#010b')[2:]
             good = fct.reduce(lambda a, b: a and (b == '0'), qos_byte[0:6])
-            print(good)
             # if good == false -> malformed packet
-            qos = int(qos_byte[6:], base=2)
+            if not good:
+                self.client.toDC = True
+                return
 
-            # if qos > 2 -> malformed packet
+            qos = int(qos_byte[6:], base=2)
             curr += 1
+            self.retCode = qos if self.checkTopicFilter(topic) else 128
 
             self.client.topics.append(topic)
             print(topic, qos)
@@ -157,6 +178,7 @@ class PublishPacket(Packet):
         super().__init__(client)
 
     def decode(self, data, flags):
+
         self.retain = flags[3]
         self.dup = flags[0]
         self.qos = int(flags[1:3], 2)
@@ -189,7 +211,7 @@ class PubackPacket(Packet):
     def encode(self, data):
         fixHeader = struct.pack('!BB', 64, 2)
 
-        varheader = struct.pack('!H', data)  # nu se stie ce aere
+        varheader = struct.pack('!H', data)
 
         header = b''.join([fixHeader, varheader])
         return header
@@ -202,7 +224,7 @@ class PubrecPacket(Packet):
     def encode(self, data):
         fixHeader = struct.pack('!BB', 80, 2)
 
-        varheader = struct.pack('!BB', 0, 0)  # idnet variable?
+        varheader = struct.pack('!H', data)
 
         header = b''.join([fixHeader, varheader])
         return header
@@ -212,10 +234,10 @@ class PubrelPacket(Packet):
     def __init__(self, client):
         super().__init__(client)
 
-    def encode(self, data):  # asta era dee decodat
+    def encode(self, data):
         fixHeader = struct.pack('!BB', 98, 2)
 
-        varheader = struct.pack('!BB', 0, 0)  # idnet variable?
+        varheader = struct.pack('!H', data)
 
         header = b''.join([fixHeader, varheader])
         return header
@@ -228,7 +250,7 @@ class PubcompPacket(Packet):
     def encode(self, data):
         fixHeader = struct.pack('!BB', 112, 2)
 
-        varheader = struct.pack('!BB', 0, 0)  # idnet variable?
+        varheader = struct.pack('!H', data)
 
         header = b''.join([fixHeader, varheader])
         return header
@@ -247,13 +269,15 @@ class SubackPacket(Packet):  # encode
         super().__init__(client)
 
     def encode(self, data):
-        #data - > (packet_id, qos)
+        # data - > (packet_id, qos)
+        packet_id = data[0]
+        qos = data[1]
+
         fixHeader = struct.pack('!BB', 144, 3)
+        varheader = struct.pack('!H', packet_id)
 
-        varheader = struct.pack('!H', data[0])
-
-        #failure?
-        payload = struct.pack('!H', data[1])
+        # failure?
+        payload = struct.pack('!B', qos)
 
         header = b''.join([fixHeader, varheader, payload])
         return header

@@ -14,11 +14,13 @@ class Client:
         self.will = False
         self.willQoS = 0
         self.willRetain = False
+        self.willMsg = ''
         self.user = None
         self.password = None
         self.id = None
         self.willTopic = ''
         self.topics = []
+        self.toDC = False
 
     def fileno(self):
         return self.conn.fileno()
@@ -30,7 +32,7 @@ class Server:
         self.logBox = logBox
         self.logs = logs
         self.port = 1883
-        self.ip = '127.0.0.1' #socket.gethostbyname(socket.gethostname())
+        self.ip = '127.0.0.1'  # socket.gethostbyname(socket.gethostname())
         self.socket = None
         self.clients = []
         self.topics = {}
@@ -73,6 +75,8 @@ class Server:
         self.listenThread = threading.Thread(target=self.listen, args=())
         self.listenThread.start()
         self.handleClientsThread.start()
+        self.closeConnectionsTimer = threading.Timer(0.5, self.closeConn)
+        self.closeConnectionsTimer.start()
 
     def stop(self):
         if not self.state:
@@ -81,49 +85,81 @@ class Server:
         self.socket.close()
         self.listenThread.join()
         self.handleClientsThread.join()
+        self.closeConnectionsTimer.cancel()
         self.printLog('Stopping server...')
 
     def handleClient(self, data, client, packet_type, flags):
         # aici if/switch
         if packet_type == 'CONNECT':
+            # timer pentru primirea pachetului connect in timp rezonabil
             conPack = ConnectPacket(client, self.clients, self.sessions)
             conPack.decode(data[0:], flags)
             connack = ConnackPacket(client)
-            connackData = connack.encode(conPack.sessionPresent)
+            connackData = connack.encode((conPack.sessionPresent, conPack.connCode))
             client.conn.sendall(connackData)
 
         if packet_type == 'SUBSCRIBE':
+
+            def dfsDictAll(dic):
+                if type(dic) is list:
+                    dic.append(client.addr)
+                    return
+                for _keys in dic.keys():
+                    dfsDictAll(dic[_keys])
+
+            def dfsDictAny(dic, topic):
+                if '/' not in topic:
+                    if topic not in dic.keys():
+                        dic[level] = [client.addr]
+                    else:
+                        if client.addr not in dic[level]:
+                            dic[level].append(client.addr)
+                    return
+                if type(dic) is list:
+                    return
+                for _keys in dic.keys():
+                    currdic = dic[_keys]
+                    dfsDictAny(dic[_keys], topic[topic])
+
             sub = SubscribePacket(client)
             sub.decode(data[0:], flags)
-            for t in client.topics:
-                #wildcards
-                topic = t
-                level = t
-                currdic = self.topics
-                while topic.find('/') != -1:
-                    level = str(topic[0:topic.find('/')])
-                    topic = str(topic[topic.find('/') + 1:])
-                    if level not in currdic.keys():
-                        currdic[level] = {}
-                    currdic = currdic[level]
+            if sub.retCode != 128:
+                for t in client.topics:
+                    # wildcards -> ce fac cu $?
+                    topic = t
+                    level = t
+                    currdic = self.topics
+                    while topic.find('/') != -1:
+                        level = str(topic[0:topic.find('/')])
+                        topic = str(topic[topic.find('/') + 1:])
+                        if level == '+':
+                            pass
+                        if level not in currdic.keys():
+                            currdic[level] = {}
+                        currdic = currdic[level]
 
-                level = str(topic)
-                if level not in currdic.keys():
-                    currdic[level] = [client.addr]
-                else:
-                    if client.addr not in currdic[level]:
-                        currdic[level].append(client.addr)
-            self.trv.event_generate("<<Subscribe>>")
+                    level = str(topic)
+                    if level == '+':
+                        pass
+                    elif level == '#':
+                        # dfsDict(currdic)
+                        pass
+                    elif level not in currdic.keys():
+                        currdic[level] = [client.addr]
+                    else:
+                        if client.addr not in currdic[level]:
+                            currdic[level].append(client.addr)
+                self.trv.event_generate("<<Subscribe>>")
 
             suback = SubackPacket(client)
-            subackData = suback.encode((2, sub.packet_id))
+            subackData = suback.encode((sub.packet_id, sub.retCode))
             client.conn.sendall(subackData)
 
         if packet_type == 'PUBLISH':
             publish = PublishPacket(client)
             publish.decode(data[0:], flags)
             self.packet_ids.append(publish.packet_identifier)
-            #forward la ceilalti clienti
+            # forward la ceilalti clienti
             self.packet_ids.remove(publish.packet_identifier)
 
             if publish.qos == 1:
@@ -137,7 +173,7 @@ class Server:
                 client.conn.sendall(pubrecData)
 
         if packet_type == 'DISCONNECT':
-            client.conn = None  # am inchis conexiune? si acum Will mesage?
+            client.toDC = True  # am inchis conexiune? si acum Will mesage?
 
     def handle_clients(self):
         while self.state:
@@ -147,7 +183,9 @@ class Server:
             for client in to_read:
                 self.printLog(f'{client.addr} a trimis un pachet')
                 data = client.conn.recv(1024)
-
+                if data == b'':
+                    client.toDC = True
+                    return
                 while len(data) > 0:
                     binary = format(int.from_bytes(data[0:1], "big"), '#010b')[2:]
                     packet_type = int(binary[0:4], 2)
@@ -159,3 +197,14 @@ class Server:
                     curr_pack = data[1 + var_length: 1 + var_length + remaining_length]
                     data = data[1 + var_length + remaining_length:]
                     self.handleClient(curr_pack, client, packet_type, flags)
+
+    def closeConn(self):
+        to_remove = []
+        for client in self.clients:
+            if client.toDC:
+                client.conn.shutdown(2)
+                client.conn.close()
+                to_remove.append(client)
+        [self.clients.remove(client) for client in to_remove]
+        self.closeConnectionsTimer = threading.Timer(0.5, self.closeConn)
+        self.closeConnectionsTimer.start()
