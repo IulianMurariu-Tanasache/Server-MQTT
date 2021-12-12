@@ -178,7 +178,6 @@ class PublishPacket(Packet):
         super().__init__(client)
 
     def decode(self, data, flags):
-
         self.retain = flags[3]
         self.dup = flags[0]
         self.qos = int(flags[1:3], 2)

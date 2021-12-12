@@ -3,14 +3,6 @@ from tkinter import *
 from tkinter.ttk import Treeview
 from Server import *
 
-# !!!!!!!!!!!!
-# Am trecut pe versiune 3.1.1 de MQTT
-# !!!!!!!!!!!!
-# TODO:
-#   -clase separate pentru fiecare pachet si mosteneste packet
-#   -pack()/unpack() cu struct
-#   -imlpementare un switch/multe if-uri care sa aleaga ce pachet sa fie decodat/encodat in handleClient
-
 topics = {}
 
 selected_client = None
@@ -39,7 +31,10 @@ def select_item(event):
             tree.item(selected, open=True)
             for i in range(0, len(tree.get_children())):
                 child = tree.get_children()[i]
-                tree.set(child, 'clienti', '')
+                if '#' in record.keys() and i < len(record['#']):
+                    tree.set(child, 'clienti', record['#'][i])
+                else:
+                    tree.set(child, 'clienti', '')
             return
         for i in range(0, len(tree.get_children())):
             child = tree.get_children()[i]
@@ -57,11 +52,6 @@ def NewMenu():
     top.title("New Menu")
     top.geometry("300x300")
     buton = Button(top, text='close menu', command=top.destroy).place(x=200, y=250)
-
-
-def delete():
-    print(f"Disconnect {selected_client}")
-    # DISCONNECT
 
 
 def main():
@@ -86,27 +76,47 @@ def main():
     # treeview
     trv = Treeview(root, columns=columns, show='headings', height=28)
 
+    def disconnectClient():
+        print(f"Disconnect {selected_client}")
+        server.discClient(selected_client)
+
+    def showLogs():
+        print(f"show logs for {selected_topic}")
+        print(server.topics_history[selected_topic])
+
     # drop down menu
-    clicked = StringVar()
     drop = Menu(root, tearoff=0)
-    drop.add_command(label="Disconnect", command=delete)
+    drop.add_command(label="Disconnect", command=disconnectClient)
+
+    drop2 = Menu(root, tearoff=0)
+    drop2.add_command(label="View Logs", command=showLogs)
 
     def do_popup(event):
-        global selected_client
-        if not (201 <= event.x <= 400 and event.y >= 25):
-            return
-        try:
-            # select doar clienti(201,25->400,25)
-            tree = event.widget
-            # select row under mouse
-            iid = tree.identify_row(event.y)
-            if iid:
-                # mouse pointer over item
-                tree.selection_set(iid)
-                selected_client = tree.item(iid)['values'][1]
-                drop.tk_popup(event.x_root, event.y_root)
-        finally:
-            drop.grab_release()
+        global selected_client, selected_topic
+        if 201 <= event.x <= 400 and event.y >= 25:
+            try:
+                # select doar clienti(201,25->400,25)
+                tree = event.widget
+                # select row under mouse
+                iid = tree.identify_row(event.y)
+                if iid:
+                    # mouse pointer over item
+                    tree.selection_set(iid)
+                    selected_client = tree.item(iid)['values'][1]
+                    drop.tk_popup(event.x_root, event.y_root)
+            finally:
+                drop.grab_release()
+        if 0 <= event.x <= 200 and event.y >= 25:
+            try:
+                # select doar topics(0-200,25)
+                tree = event.widget
+                iid = tree.identify_row(event.y)
+                if iid:
+                    tree.selection_set(iid)
+                    selected_topic = iid[1:]
+                    drop2.tk_popup(event.x_root, event.y_root)
+            finally:
+                drop2.grab_release()
 
     trv.bind("<Button-3>", do_popup)
 
@@ -126,11 +136,12 @@ def main():
         if type(dic) is not dict:
             return
         for _keys in dic.keys():
-            name = ' ' * 2 * indent + str(_keys)
-            if type(dic[_keys]) is dict:
-                name = name + '/'
-            trv.insert(pid, END, iid=pid + '/' + str(_keys), values=(name, '', ''))
-            dfsDict(dic[_keys], pid + '/' + str(_keys), indent + 1)
+            if _keys not in ['#', '+']:
+                name = ' ' * 2 * indent + str(_keys)
+                if type(dic[_keys]) is dict:
+                    name = name + '/'
+                trv.insert(pid, END, iid=pid + '/' + str(_keys), values=(name, '', ''))
+                dfsDict(dic[_keys], pid + '/' + str(_keys), indent + 1)
 
     def onSub(event):
         global topics

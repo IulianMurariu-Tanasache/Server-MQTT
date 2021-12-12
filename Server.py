@@ -36,6 +36,7 @@ class Server:
         self.socket = None
         self.clients = []
         self.topics = {}
+        self.topics_history = {}
         self.trv = trv
         self.sessions = []
         self.packet_ids = []
@@ -102,7 +103,7 @@ class Server:
 
             def dfsDictAll(dic):
                 if type(dic) is list:
-                    dic.append(client.addr)
+                    dic.append(client.id)
                     return
                 for _keys in dic.keys():
                     dfsDictAll(dic[_keys])
@@ -110,10 +111,10 @@ class Server:
             def dfsDictAny(dic, topic):
                 if '/' not in topic:
                     if topic not in dic.keys():
-                        dic[level] = [client.addr]
+                        dic[level] = [client.id]
                     else:
-                        if client.addr not in dic[level]:
-                            dic[level].append(client.addr)
+                        if client.id not in dic[level]:
+                            dic[level].append(client.id)
                     return
                 if type(dic) is list:
                     return
@@ -145,10 +146,13 @@ class Server:
                         # dfsDict(currdic)
                         pass
                     elif level not in currdic.keys():
-                        currdic[level] = [client.addr]
+                        currdic[level] = [client.id]
                     else:
-                        if client.addr not in currdic[level]:
-                            currdic[level].append(client.addr)
+                        if client.id not in currdic[level]:
+                            if type(currdic[level]) is list:
+                                currdic[level].append(client.id)
+                            else:
+                                currdic[level]['#'] = [client.id]
                 self.trv.event_generate("<<Subscribe>>")
 
             suback = SubackPacket(client)
@@ -159,6 +163,10 @@ class Server:
             publish = PublishPacket(client)
             publish.decode(data[0:], flags)
             self.packet_ids.append(publish.packet_identifier)
+            if publish.topic not in self.topics_history.keys():
+                self.topics_history[publish.topic] = [publish.msg]
+            else:
+                self.topics_history[publish.topic].append(publish.msg)
             # forward la ceilalti clienti
             self.packet_ids.remove(publish.packet_identifier)
 
@@ -181,7 +189,7 @@ class Server:
                 continue
             to_read, _, _ = select.select(self.clients, [], [], 1)
             for client in to_read:
-                self.printLog(f'{client.addr} a trimis un pachet')
+                self.printLog(f'{client.id if client.id is not None else client.addr} a trimis un pachet')
                 data = client.conn.recv(1024)
                 if data == b'':
                     client.toDC = True
@@ -197,6 +205,12 @@ class Server:
                     curr_pack = data[1 + var_length: 1 + var_length + remaining_length]
                     data = data[1 + var_length + remaining_length:]
                     self.handleClient(curr_pack, client, packet_type, flags)
+
+    def discClient(self, id):
+        for client in self.clients:
+            if client.id == id:
+                client.toDC = True
+                return
 
     def closeConn(self):
         to_remove = []
