@@ -59,7 +59,7 @@ class ConnectPacket(Packet):
         self.client.willRetain = connect_flags[2] == '1'
         password = connect_flags[1] == '1'
         username = connect_flags[0] == '1'
-        self.client.keepAlive = keep_alive
+        self.client.keepAlive = keep_alive# timerul  = keepAlive * 1.5 #keep alive  0 fara timer
 
         payload_data = data[10:]
         id_len, self.client.id = decodeUTF8(payload_data)
@@ -290,7 +290,7 @@ class UnSubackPacket(Packet):  # encode
         pass
 
 
-class PingReqPacket(Packet):
+class PingReqPacket(Packet):#asta nu face nimic ptr noi
     def __init__(self, client):
         super().__init__(client)
 
@@ -303,7 +303,10 @@ class PingRespPacket(Packet):
         super().__init__(client)
 
     def encode(self, data):
-        pass
+        fixheader = struct.pack('!BB', 192, 0)
+
+        header = b''.join([fixheader])
+        return header
 
 
 class Disconnect(Packet):

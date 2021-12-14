@@ -1,6 +1,6 @@
 import tkinter.ttk
 from tkinter import *
-from  tkinter.ttk import Treeview
+from tkinter.ttk import Treeview
 from Server import *
 
 topics = {}
@@ -64,16 +64,20 @@ def main():
     # definirea coloanelor
     columns = ('subiecte', 'clienti', 'optiuni')
 
-    # textbox
-    camp = Label(root, text="Logs", borderwidth=4, bg="white", relief="raised", width=49, font=('Tahoma', 10)).place(
-        x=600, y=0)
+    # textboxs
+    Logs = Label(root, text="Logs", borderwidth=4, bg="white", relief="raised", width=49, font=('Tahoma', 10)).place(x=600, y=0)
+    Topics = Label(root, text='Topic', borderwidth=4, bg="white", relief="raised", width=49, font=('Tahoma', 10)).place(x=600, y=250)
 
     # listbox
-    logsList = Listbox(root, width=47, height=10, relief="raised", font=('Tahoma', 10))
-    logsList.place(x=622, y=30)
+    logsList = Listbox(root, width=50, height=13, relief="raised", font=('Tahoma', 10))
+    logsList.place(x=600, y=26)
+
+    historyList = Listbox(root, width=50, height=13, relief="raised", font=('Tahoma', 10))
+    historyList.place(x=600, y=274)
+
     logBox = Listbox(root, relief="raised", width=125, height=2, font=('Tahoma', 14))
-    logBox.insert(0, "AFISAT DE LA SERVER\n")
-    logBox.place(x=0, y=600)
+    logBox.insert(0, "  AFISAT DE LA SERVER\n")
+    logBox.place(x=0, y=590)
 
     # treeview
     trv = Treeview(root, columns=columns, show='headings', height=28)
@@ -127,12 +131,12 @@ def main():
     trv.heading('clienti', text='Clients')
     trv.heading('optiuni', text='Options')
 
-    server = Server(logBox, logsList, trv)
+    server = Server(logBox, logsList, historyList,trv)
 
     # generat random data
-    button1 = Button(root, text='Start', activebackground="green", width=20, command=server.start).place(x=80, y=690)
-    button2 = Button(root, text='Stop', activebackground="red", width=20, command=server.stop).place(x=250, y=690)
-    button3 = Button(root, text='Configurare', activebackground="orange", width=20, command=NewMenu).place(x=420, y=690)
+    button1 = Button(root, text='Start', activebackground="green", width=20, command=server.start).place(x=80, y=670)
+    button2 = Button(root, text='Stop', activebackground="red", width=20, command=server.stop).place(x=250, y=670)
+    button3 = Button(root, text='Configurare', activebackground="orange", width=20, command=NewMenu).place(x=420, y=670)
 
     def dfsDict(dic, pid, indent):
         if type(dic) is not dict:
@@ -156,9 +160,9 @@ def main():
     trv.grid(row=0, column=0, sticky='nsew')
 
     # add scroll
-    scrollbar = Scrollbar(root, orient=VERTICAL, command=trv.yview)
-    trv.configure(yscroll=scrollbar.set)
-    scrollbar.grid(row=0, column=1, sticky='ns')
+   # scrollbar = Scrollbar(root, orient=VERTICAL, command=trv.yview)
+    #trv.configure(yscroll=scrollbar.set)
+    #scrollbar.grid(row=0, column=1, sticky='ns')
 
     def on_closing():
         server.stop()

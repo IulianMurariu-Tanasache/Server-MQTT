@@ -41,6 +41,7 @@ class Server:
         self.sessions = []
         self.packet_ids = []
 
+    #de vazut
     def printLog(self, log):
         self.logs.insert(0, log)
         self.logBox.delete(1, 'end')
@@ -91,6 +92,8 @@ class Server:
 
     def handleClient(self, data, client, packet_type, flags):
         # aici if/switch
+
+        # reset timer keepAlive
         if packet_type == 'CONNECT':
             # timer pentru primirea pachetului connect in timp rezonabil
             conPack = ConnectPacket(client, self.clients, self.sessions)
@@ -98,6 +101,10 @@ class Server:
             connack = ConnackPacket(client)
             connackData = connack.encode((conPack.sessionPresent, conPack.connCode))
             client.conn.sendall(connackData)
+            # pornire timer
+            # verificare keep alv
+            if client.keepAlive == 0:
+                self.resetTimer(client.keepAlive)
 
         if packet_type == 'SUBSCRIBE':
 
@@ -183,6 +190,11 @@ class Server:
         if packet_type == 'DISCONNECT':
             client.toDC = True  # am inchis conexiune? si acum Will mesage?
 
+        if packet_type == 'PINGREQ':
+            pingresp = PingRespPacket(client)
+            pingrespData = pingresp.encode(None)
+            client.conn.sendall(pingrespData)
+
     def handle_clients(self):
         while self.state:
             if len(self.clients) == 0:
@@ -220,5 +232,15 @@ class Server:
                 client.conn.close()
                 to_remove.append(client)
         [self.clients.remove(client) for client in to_remove]
-        self.closeConnectionsTimer = threading.Timer(0.5, self.closeConn)
+        # fac din nou si start
+
+        self.resetTimer(0.5)
+        self.toDC = True
+        #self.closeConnectionsTimer = threading.Timer(0.5, self.closeConn)
+        #self.closeConnectionsTimer.start()
+        # toDC = TRUE
+
+    def resetTimer(self, keepAlive):
+        self.closeConnectionsTimer = threading.Timer(keepAlive, self.closeConn)
         self.closeConnectionsTimer.start()
+
