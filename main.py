@@ -87,8 +87,10 @@ def main():
         server.discClient(selected_client)
 
     def showLogs():
-        print(f"show logs for {selected_topic}")
-        print(server.topics_history[selected_topic])
+        index = selected_topic
+        lisy = server.topics_history[index]
+        print(server.topics_history)
+        historyList.insert(0, lisy)
 
     # drop down menu
     drop = Menu(root, tearoff=0)
@@ -131,7 +133,7 @@ def main():
     trv.heading('clienti', text='Clients')
     trv.heading('optiuni', text='Options')
 
-    server = Server(logBox, logsList, historyList,trv)
+    server = Server(logBox, logsList,trv)
 
     # generat random data
     button1 = Button(root, text='Start', activebackground="green", width=20, command=server.start).place(x=80, y=670)

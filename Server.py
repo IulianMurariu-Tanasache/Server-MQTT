@@ -21,9 +21,12 @@ class Client:
         self.willTopic = ''
         self.topics = []
         self.toDC = False
+        self.timer = None
 
     def fileno(self):
         return self.conn.fileno()
+    def toDec(self):
+        self.toDC = True
 
 
 class Server:
@@ -94,6 +97,8 @@ class Server:
         # aici if/switch
 
         # reset timer keepAlive
+        if client.connected:
+            self.resetTimer(client)
         if packet_type == 'CONNECT':
             # timer pentru primirea pachetului connect in timp rezonabil
             conPack = ConnectPacket(client, self.clients, self.sessions)
@@ -103,8 +108,8 @@ class Server:
             client.conn.sendall(connackData)
             # pornire timer
             # verificare keep alv
-            if client.keepAlive == 0:
-                self.resetTimer(client.keepAlive)
+            if client.keepAlive != 0:
+                self.resetTimer(client)
 
         if packet_type == 'SUBSCRIBE':
 
@@ -228,19 +233,17 @@ class Server:
         to_remove = []
         for client in self.clients:
             if client.toDC:
+                client.connected = False
                 client.conn.shutdown(2)
                 client.conn.close()
                 to_remove.append(client)
         [self.clients.remove(client) for client in to_remove]
         # fac din nou si start
-
-        self.resetTimer(0.5)
-        self.toDC = True
-        #self.closeConnectionsTimer = threading.Timer(0.5, self.closeConn)
-        #self.closeConnectionsTimer.start()
-        # toDC = TRUE
-
-    def resetTimer(self, keepAlive):
-        self.closeConnectionsTimer = threading.Timer(keepAlive, self.closeConn)
+        self.closeConnectionsTimer = threading.Timer(0.5, self.closeConn)
         self.closeConnectionsTimer.start()
+
+
+    def resetTimer(self, client):
+        client.timer = threading.Timer(1.5 * client.keepAlive, client.toDec)
+        client.timer.start()
 
