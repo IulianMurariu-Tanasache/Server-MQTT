@@ -42,3 +42,4 @@ def decodeVariableInt(byte):
         i += 1
         binary = int.from_bytes(byte[i:i + 1], "big")
     return i + 1, val
+#coment
