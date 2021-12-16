@@ -70,7 +70,7 @@ def main():
 
     # listbox
     logsList = Listbox(root, width=50, height=13, relief="raised", font=('Tahoma', 10))
-    logsList.place(x=600, y=26)
+    logsList.place(x=600, y=26)###################
 
     historyList = Listbox(root, width=50, height=13, relief="raised", font=('Tahoma', 10))
     historyList.place(x=600, y=274)
