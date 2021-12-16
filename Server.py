@@ -180,8 +180,17 @@ class Server:
                 pubrecData = pubrec.encode(publish.packet_identifier)
                 client.conn.sendall(pubrecData)
 
+        if packet_type == 'UNSUBSCRIBE':
+            #unsub
+            unsub = UnsubscribePacket(client)
+            unsub.decode(data[0:], flags)
+            unsuback = UnSubackPacket(client)
+            unsubackData = unsuback.encode(unsub.packet_id)
+            client.conn.sendall(unsubackData)
+
         if packet_type == 'DISCONNECT':
-            client.toDC = True  # am inchis conexiune? si acum Will mesage?
+            client.will = False
+            client.toDC = True
 
     def handle_clients(self):
         while self.state:
@@ -216,6 +225,9 @@ class Server:
         to_remove = []
         for client in self.clients:
             if client.toDC:
+                if client.will:
+                    #trimite will-ul mai departe
+                    pass
                 client.conn.shutdown(2)
                 client.conn.close()
                 to_remove.append(client)
