@@ -52,7 +52,6 @@ class ConnectPacket(Packet):
             return
 
         clean_start = connect_flags[6] == '1'
-        # TODO: implementare sesiune, will message, QoS, willRetain, password, username, keep alive, session expiry, user prop?, auth method?, auth data?
 
         self.client.will = connect_flags[5] == '1'
         self.client.willQoS = int(connect_flags[3:5], 2)
@@ -260,7 +259,21 @@ class UnsubscribePacket(Packet):
         super().__init__(client)
 
     def decode(self, data, flags):
-        pass
+        if int(flags, 2) != 2:
+            self.client.toDC = True
+            return
+
+        self.packet_id, = struct.unpack('!H', data[0:2])
+        payload_data = data[2:]
+
+        payload_len = len(payload_data)
+        curr = 0
+
+        while curr < payload_len:
+            topic_len, topic = decodeUTF8(payload_data[curr:])
+            curr += 2 + topic_len
+            self.client.topics.append(topic)
+            print(topic)
 
 
 class SubackPacket(Packet):  # encode
@@ -287,7 +300,13 @@ class UnSubackPacket(Packet):  # encode
         super().__init__(client)
 
     def encode(self, data):
-        pass
+        packet_id = data
+
+        fixHeader = struct.pack('!BB', 176, 2)
+        varheader = struct.pack('!H', packet_id)
+
+        header = b''.join([fixHeader, varheader])
+        return header
 
 
 class PingReqPacket(Packet):#asta nu face nimic ptr noi

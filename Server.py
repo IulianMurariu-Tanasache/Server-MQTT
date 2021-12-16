@@ -44,7 +44,6 @@ class Server:
         self.sessions = []
         self.packet_ids = []
 
-    #de vazut
     def printLog(self, log):
         self.logs.insert(0, log)
         self.logBox.delete(1, 'end')
@@ -192,8 +191,17 @@ class Server:
                 pubrecData = pubrec.encode(publish.packet_identifier)
                 client.conn.sendall(pubrecData)
 
+        if packet_type == 'UNSUBSCRIBE':
+            #unsub
+            unsub = UnsubscribePacket(client)
+            unsub.decode(data[0:], flags)
+            unsuback = UnSubackPacket(client)
+            unsubackData = unsuback.encode(unsub.packet_id)
+            client.conn.sendall(unsubackData)
+
         if packet_type == 'DISCONNECT':
-            client.toDC = True  # am inchis conexiune? si acum Will mesage?
+            client.will = False
+            client.toDC = True
 
         if packet_type == 'PINGREQ':
             pingresp = PingRespPacket(client)
@@ -233,12 +241,14 @@ class Server:
         to_remove = []
         for client in self.clients:
             if client.toDC:
+                if client.will:
+                    #trimite will-ul mai departe
+                    pass
                 client.connected = False
                 client.conn.shutdown(2)
                 client.conn.close()
                 to_remove.append(client)
         [self.clients.remove(client) for client in to_remove]
-        # fac din nou si start
         self.closeConnectionsTimer = threading.Timer(0.5, self.closeConn)
         self.closeConnectionsTimer.start()
 
