@@ -111,7 +111,10 @@ class Server:
                 self.resetTimer(client)
 
         if packet_type == 'SUBSCRIBE':
-
+            #string matching la stanga (si dreapta) pt topic filter->lista cu toate nivelele pentru un topic
+            #dup e degaba
+            #ncap pt wireshark pt adaptor de loopback
+            #packet_id similar cu dup?
             def dfsDictAll(dic):
                 if type(dic) is list:
                     dic.append(client.id)

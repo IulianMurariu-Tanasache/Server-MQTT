@@ -1,7 +1,6 @@
-import struct
+import functools as fct
 
 from HelperFunctions import *
-import functools as fct
 
 
 class Session:

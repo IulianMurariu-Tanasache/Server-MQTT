@@ -1,11 +1,9 @@
-import tkinter.ttk
 from tkinter import *
 from tkinter.ttk import Treeview
+
 from Server import *
 
 topics = {}
-
-#lol
 
 selected_client = None
 selected_topic = None
@@ -89,8 +87,8 @@ def main():
     def showLogs():
         index = selected_topic
         lisy = server.topics_history[index]
-        print(server.topics_history)
-        historyList.insert(0, lisy)
+        for i in range(len(server.topics_history[index])):
+            historyList.insert(i, lisy[i])
 
     # drop down menu
     drop = Menu(root, tearoff=0)
