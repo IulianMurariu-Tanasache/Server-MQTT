@@ -17,34 +17,37 @@ def select_item(event):
     # select doar topicuri(0,25 ->200,25); h = 45
     if 0 <= x <= 200:
         tree = event.widget
-        selected = tree.focus()
-        selected_topic = selected[1:]
+        selected_topic = tree.focus()
         if selected_topic == '':
             return
-        lvl = selected_topic
-        dic = topics
-        while '/' in lvl:
-            dic = dic[lvl[0:lvl.find('/')]]
-            lvl = lvl[lvl.find('/') + 1:]
-        record = dic[lvl]
-        if type(record) is dict:
-            tree.item(selected, open=True)
-            for i in range(0, len(tree.get_children())):
-                child = tree.get_children()[i]
-                if '#' in record.keys() and i < len(record['#']):
-                    tree.set(child, 'clienti', record['#'][i])
-                else:
-                    tree.set(child, 'clienti', '')
-            return
-        for i in range(0, len(tree.get_children())):
-            child = tree.get_children()[i]
-            if i < len(record):
-                tree.set(child, 'clienti', record[i])
-            else:
-                tree.set(child, 'clienti', '')
-        remaining = len(record) - len(tree.get_children())
-        for i in range(0, remaining):
-            tree.insert('', END, values=('', record[len(tree.get_children()) + i], ''))
+        if selected_topic in topics:
+            tree.set(selected_topic, 'clienti', topics[selected_topic])
+            tree.item(selected_topic, open=True) #not tree.item(selected_topic, 'open')
+            for topic in topics:
+                if topic != selected_topic:
+                    tree.set(topic, 'clienti', '')
+        # while '/' in lvl:
+        #     dic = dic[lvl[0:lvl.find('/')]]
+        #     lvl = lvl[lvl.find('/') + 1:]
+        # record = dic[lvl]
+        # if type(record) is dict:
+        #     tree.item(selected, open=True)
+        #     for i in range(0, len(tree.get_children())):
+        #         child = tree.get_children()[i]
+        #         if '#' in record.keys() and i < len(record['#']):
+        #             tree.set(child, 'clienti', record['#'][i])
+        #         else:
+        #             tree.set(child, 'clienti', '')
+        #     return
+        # for i in range(0, len(tree.get_children())):
+        #     child = tree.get_children()[i]
+        #     if i < len(record):
+        #         tree.set(child, 'clienti', record[i])
+        #     else:
+        #         tree.set(child, 'clienti', '')
+        # remaining = len(record) - len(tree.get_children())
+        # for i in range(0, remaining):
+        #     tree.insert('', END, values=('', record[len(tree.get_children()) + i], ''))
 
 
 def NewMenu():
@@ -63,12 +66,14 @@ def main():
     columns = ('subiecte', 'clienti', 'optiuni')
 
     # textboxs
-    Logs = Label(root, text="Logs", borderwidth=4, bg="white", relief="raised", width=49, font=('Tahoma', 10)).place(x=600, y=0)
-    Topics = Label(root, text='Topic', borderwidth=4, bg="white", relief="raised", width=49, font=('Tahoma', 10)).place(x=600, y=250)
+    Logs = Label(root, text="Logs", borderwidth=4, bg="white", relief="raised", width=49, font=('Tahoma', 10)).place(
+        x=600, y=0)
+    Topics = Label(root, text='Topic', borderwidth=4, bg="white", relief="raised", width=49, font=('Tahoma', 10)).place(
+        x=600, y=250)
 
     # listbox
     logsList = Listbox(root, width=50, height=13, relief="raised", font=('Tahoma', 10))
-    logsList.place(x=600, y=26)###################
+    logsList.place(x=600, y=26)  ###################
 
     historyList = Listbox(root, width=50, height=13, relief="raised", font=('Tahoma', 10))
     historyList.place(x=600, y=274)
@@ -131,38 +136,55 @@ def main():
     trv.heading('clienti', text='Clients')
     trv.heading('optiuni', text='Options')
 
-    server = Server(logBox, logsList,trv)
+    server = Server(logBox, logsList, trv)
 
     # generat random data
     button1 = Button(root, text='Start', activebackground="green", width=20, command=server.start).place(x=80, y=670)
     button2 = Button(root, text='Stop', activebackground="red", width=20, command=server.stop).place(x=250, y=670)
     button3 = Button(root, text='Configurare', activebackground="orange", width=20, command=NewMenu).place(x=420, y=670)
 
-    def dfsDict(dic, pid, indent):
-        if type(dic) is not dict:
-            return
-        for _keys in dic.keys():
-            if _keys not in ['#', '+']:
-                name = ' ' * 2 * indent + str(_keys)
-                if type(dic[_keys]) is dict:
-                    name = name + '/'
-                trv.insert(pid, END, iid=pid + '/' + str(_keys), values=(name, '', ''))
-                dfsDict(dic[_keys], pid + '/' + str(_keys), indent + 1)
+    def addTopics():
+        for topic in server.topics:
+            if '/' in topic:
+                pid = ''
+                index = 0
+                t = topic[0:topic.find('/')]
+                next = topic[topic.find('/') + 1:]
+                if t not in trv.get_children():
+                    trv.insert(pid, END, iid=t, values=(t, '', ''))
+                pid = t
+                while '/' in next:
+                    index += 1
+                    t = next[0:next.find('/')]
+                    next = next[next.find('/') + 1:]
+                    id = pid + '/' + t
+                    if id not in trv.get_children(pid):
+                        trv.insert(pid, END, iid=id, values=(index * '   ' + t, '', ''))
+                    pid += '/' + t
+                t = next
+                index += 1
+                id = pid + '/' + t
+                if id not in trv.get_children(pid):
+                    trv.insert(pid, END, iid=id, values=(index * '   ' + t, '', ''))
+            else:
+                if topic not in trv.get_children():
+                    trv.insert('', END, iid=topic, values=(topic, '', ''))
 
     def onSub(event):
         global topics
         topics = server.topics
         trv.delete(*trv.get_children())
-        dfsDict(topics, '', 0)
+        topics = server.topics
+        addTopics()
 
     trv.bind('<ButtonRelease-1>', select_item)
     trv.bind('<<Subscribe>>', onSub)
     trv.grid(row=0, column=0, sticky='nsew')
 
     # add scroll
-   # scrollbar = Scrollbar(root, orient=VERTICAL, command=trv.yview)
-    #trv.configure(yscroll=scrollbar.set)
-    #scrollbar.grid(row=0, column=1, sticky='ns')
+    # scrollbar = Scrollbar(root, orient=VERTICAL, command=trv.yview)
+    # trv.configure(yscroll=scrollbar.set)
+    # scrollbar.grid(row=0, column=1, sticky='ns')
 
     def on_closing():
         server.stop()
@@ -174,4 +196,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-    #coment
+    # coment

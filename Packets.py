@@ -34,7 +34,8 @@ class ConnectPacket(Packet):
 
         prot_len, protocol_name, prot_version, conn_flags, keep_alive = struct.unpack('!H4sBcH', data[0:10])
         protocol_name = protocol_name.decode(encoding='utf-8')
-        connect_flags = bin(int.from_bytes(conn_flags, 'big')).lstrip('0b')
+        int_conn = int.from_bytes(conn_flags, 'big')
+        connect_flags = f'{int_conn:08b}'
 
         if protocol_name != 'MQTT' or prot_version != 4:
             print('Eroare conectare1')
@@ -42,8 +43,8 @@ class ConnectPacket(Packet):
             self.connCode = 1
             return
 
+        #print(connect_flags[0], connect_flags, connect_flags[1])
         reserved = connect_flags[7] == '1'
-        # print(reserved, connect_flags[0], connect_flags, connect_flags[1])
 
         if reserved:
             self.client.toDC = True
@@ -125,21 +126,8 @@ class SubscribePacket(Packet):
     def __init__(self, client):
         super().__init__(client)
 
-    def checkTopicFilter(self, t):
-        topic = t
-        level = t
-        if t == '+':
-            return False
-        while topic.find('/') != -1:
-            level = str(topic[0:topic.find('/')])
-            topic = str(topic[topic.find('/') + 1:])
-            if level == '' or level == '#' or any(x in ['#', '+'] for x in level):
-                return False
-        level = str(topic)
-        return True
-
     def decode(self, data, flags):
-
+        self.topics = []
         if int(flags, 2) != 2:
             self.client.toDC = True
             return
@@ -165,10 +153,9 @@ class SubscribePacket(Packet):
 
             qos = int(qos_byte[6:], base=2)
             curr += 1
-            self.retCode = qos if self.checkTopicFilter(topic) else 128
-
-            self.client.topics.append(topic)
-            print(topic, qos)
+            self.retCode = qos
+            self.topics.append(topic)
+            #print(topic, qos)
 
 
 class PublishPacket(Packet):
@@ -196,9 +183,6 @@ class PublishPacket(Packet):
         self.topic = topic_name
         self.msg = msgpayload
         print(topic_name, msgpayload)
-
-
-# cumva pe interfata
 
 
 class PubackPacket(Packet):
@@ -261,7 +245,7 @@ class UnsubscribePacket(Packet):
         if int(flags, 2) != 2:
             self.client.toDC = True
             return
-
+        self.topics = []
         self.packet_id, = struct.unpack('!H', data[0:2])
         payload_data = data[2:]
 
@@ -271,8 +255,7 @@ class UnsubscribePacket(Packet):
         while curr < payload_len:
             topic_len, topic = decodeUTF8(payload_data[curr:])
             curr += 2 + topic_len
-            self.client.topics.append(topic)
-            print(topic)
+            self.topics.append(topic)
 
 
 class SubackPacket(Packet):  # encode
@@ -321,7 +304,7 @@ class PingRespPacket(Packet):
         super().__init__(client)
 
     def encode(self, data):
-        fixheader = struct.pack('!BB', 192, 0)
+        fixheader = struct.pack('!BB', 208, 0)
 
         header = b''.join([fixheader])
         return header

@@ -92,6 +92,18 @@ class Server:
         self.closeConnectionsTimer.cancel()
         self.printLog('Stopping server...')
 
+    def checkTopicFilter(self, topics):
+        # $ nu e implementat
+        for t in topics:
+            next = t
+            level = t
+            while next.find('/') != -1:
+                level = str(next[0:next.find('/')])
+                next = str(next[next.find('/') + 1:])
+                if level == '' or level == '#' or any(x in ['#', '+'] for x in level):
+                    return False
+        return True
+
     def handleClient(self, data, client, packet_type, flags):
         # aici if/switch
 
@@ -115,62 +127,23 @@ class Server:
             #dup e degaba
             #ncap pt wireshark pt adaptor de loopback
             #packet_id similar cu dup?
-            def dfsDictAll(dic):
-                if type(dic) is list:
-                    dic.append(client.id)
-                    return
-                for _keys in dic.keys():
-                    dfsDictAll(dic[_keys])
-
-            def dfsDictAny(dic, topic):
-                if '/' not in topic:
-                    if topic not in dic.keys():
-                        dic[level] = [client.id]
-                    else:
-                        if client.id not in dic[level]:
-                            dic[level].append(client.id)
-                    return
-                if type(dic) is list:
-                    return
-                for _keys in dic.keys():
-                    currdic = dic[_keys]
-                    dfsDictAny(dic[_keys], topic[topic])
 
             sub = SubscribePacket(client)
             sub.decode(data[0:], flags)
-            if sub.retCode != 128:
-                for t in client.topics:
-                    # wildcards -> ce fac cu $?
-                    topic = t
-                    level = t
-                    currdic = self.topics
-                    while topic.find('/') != -1:
-                        level = str(topic[0:topic.find('/')])
-                        topic = str(topic[topic.find('/') + 1:])
-                        if level == '+':
-                            pass
-                        if level not in currdic.keys():
-                            currdic[level] = {}
-                        currdic = currdic[level]
-
-                    level = str(topic)
-                    if level == '+':
-                        pass
-                    elif level == '#':
-                        # dfsDict(currdic)
-                        pass
-                    elif level not in currdic.keys():
-                        currdic[level] = [client.id]
-                    else:
-                        if client.id not in currdic[level]:
-                            if type(currdic[level]) is list:
-                                currdic[level].append(client.id)
-                            else:
-                                currdic[level]['#'] = [client.id]
+            if self.checkTopicFilter(sub.topics):
+                client.topics += sub.topics
+                for topic in client.topics:
+                    if topic in self.topics and client.id not in self.topics[topic]:
+                        self.topics[topic].append(client.id)
+                    elif topic not in self.topics:
+                        self.topics[topic] = [client.id]
                 self.trv.event_generate("<<Subscribe>>")
+            else:
+                sub.retCode = 128
 
             suback = SubackPacket(client)
             subackData = suback.encode((sub.packet_id, sub.retCode))
+
             client.conn.sendall(subackData)
 
         if packet_type == 'PUBLISH':
@@ -195,9 +168,16 @@ class Server:
                 client.conn.sendall(pubrecData)
 
         if packet_type == 'UNSUBSCRIBE':
-            #unsub
             unsub = UnsubscribePacket(client)
             unsub.decode(data[0:], flags)
+            new_topics = []
+            for topic in client.topics:
+                if topic not in unsub.topics:
+                    new_topics.append(topic)
+                else:
+                    self.topics[topic].remove(client.id)
+            client.topics = new_topics
+            self.trv.event_generate("<<Subscribe>>")
             unsuback = UnSubackPacket(client)
             unsubackData = unsuback.encode(unsub.packet_id)
             client.conn.sendall(unsubackData)
@@ -211,13 +191,14 @@ class Server:
             pingrespData = pingresp.encode(None)
             client.conn.sendall(pingrespData)
 
+        self.printLog(f'{client.id if client.id is not None else client.addr} a trimis {packet_type}')
+
     def handle_clients(self):
         while self.state:
             if len(self.clients) == 0:
                 continue
             to_read, _, _ = select.select(self.clients, [], [], 1)
             for client in to_read:
-                self.printLog(f'{client.id if client.id is not None else client.addr} a trimis un pachet')
                 data = client.conn.recv(1024)
                 if data == b'':
                     client.toDC = True
@@ -227,7 +208,6 @@ class Server:
                     packet_type = int(binary[0:4], 2)
                     packet_type = packet_types_to_string[packet_type]
                     flags = binary[4:]
-                    print(packet_type)
 
                     var_length, remaining_length = decodeVariableInt(data[1:])
                     curr_pack = data[1 + var_length: 1 + var_length + remaining_length]
