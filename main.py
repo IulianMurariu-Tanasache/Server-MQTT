@@ -20,34 +20,13 @@ def select_item(event):
         selected_topic = tree.focus()
         if selected_topic == '':
             return
+        tree.event_generate("<<Publish>>")
         if selected_topic in topics:
             tree.set(selected_topic, 'clienti', topics[selected_topic])
-            tree.item(selected_topic, open=True) #not tree.item(selected_topic, 'open')
+            tree.item(selected_topic, open=True)  # not tree.item(selected_topic, 'open')
             for topic in topics:
                 if topic != selected_topic:
                     tree.set(topic, 'clienti', '')
-        # while '/' in lvl:
-        #     dic = dic[lvl[0:lvl.find('/')]]
-        #     lvl = lvl[lvl.find('/') + 1:]
-        # record = dic[lvl]
-        # if type(record) is dict:
-        #     tree.item(selected, open=True)
-        #     for i in range(0, len(tree.get_children())):
-        #         child = tree.get_children()[i]
-        #         if '#' in record.keys() and i < len(record['#']):
-        #             tree.set(child, 'clienti', record['#'][i])
-        #         else:
-        #             tree.set(child, 'clienti', '')
-        #     return
-        # for i in range(0, len(tree.get_children())):
-        #     child = tree.get_children()[i]
-        #     if i < len(record):
-        #         tree.set(child, 'clienti', record[i])
-        #     else:
-        #         tree.set(child, 'clienti', '')
-        # remaining = len(record) - len(tree.get_children())
-        # for i in range(0, remaining):
-        #     tree.insert('', END, values=('', record[len(tree.get_children()) + i], ''))
 
 
 def NewMenu():
@@ -69,14 +48,14 @@ def main():
     Logs = Label(root, text="Logs", borderwidth=4, bg="white", relief="raised", width=49, font=('Tahoma', 10)).place(
         x=600, y=0)
     Topics = Label(root, text='Topic', borderwidth=4, bg="white", relief="raised", width=49, font=('Tahoma', 10)).place(
-        x=600, y=250)
+        x=600, y=270)
 
     # listbox
     logsList = Listbox(root, width=50, height=13, relief="raised", font=('Tahoma', 10))
-    logsList.place(x=600, y=26)  ###################
+    logsList.place(x=600, y=26)
 
-    historyList = Listbox(root, width=50, height=13, relief="raised", font=('Tahoma', 10))
-    historyList.place(x=600, y=274)
+    historyList = Listbox(root, width=50, height=11, relief="raised", font=('Tahoma', 10))
+    historyList.place(x=600, y=300)
 
     logBox = Listbox(root, relief="raised", width=125, height=2, font=('Tahoma', 14))
     logBox.insert(0, "  AFISAT DE LA SERVER\n")
@@ -87,20 +66,22 @@ def main():
 
     def disconnectClient():
         print(f"Disconnect {selected_client}")
-        server.discClient(selected_client)
+        server.discClientById(selected_client)
 
-    def showLogs():
-        index = selected_topic
-        lisy = server.topics_history[index]
-        for i in range(len(server.topics_history[index])):
-            historyList.insert(i, lisy[i])
+    def showLogs(event):
+        if selected_topic is None or selected_topic not in server.topics_history.keys():
+            return
+        lisy = server.topics_history[selected_topic]
+        historyList.delete(0, END)
+        for i in range(len(server.topics_history[selected_topic])):
+            historyList.insert(i, lisy[-1 * (1+i)])
 
     # drop down menu
     drop = Menu(root, tearoff=0)
     drop.add_command(label="Disconnect", command=disconnectClient)
 
-    drop2 = Menu(root, tearoff=0)
-    drop2.add_command(label="View Logs", command=showLogs)
+    #drop2 = Menu(root, tearoff=0)
+    #drop2.add_command(label="View Logs", command=showLogs)
 
     def do_popup(event):
         global selected_client, selected_topic
@@ -117,17 +98,17 @@ def main():
                     drop.tk_popup(event.x_root, event.y_root)
             finally:
                 drop.grab_release()
-        if 0 <= event.x <= 200 and event.y >= 25:
-            try:
-                # select doar topics(0-200,25)
-                tree = event.widget
-                iid = tree.identify_row(event.y)
-                if iid:
-                    tree.selection_set(iid)
-                    selected_topic = iid[1:]
-                    drop2.tk_popup(event.x_root, event.y_root)
-            finally:
-                drop2.grab_release()
+        # if 0 <= event.x <= 200 and event.y >= 25:
+        #     try:
+        #         # select doar topics(0-200,25)
+        #         tree = event.widget
+        #         iid = tree.identify_row(event.y)
+        #         if iid:
+        #             tree.selection_set(iid)
+        #             selected_topic = iid
+        #             drop2.tk_popup(event.x_root, event.y_root)
+        #     finally:
+        #         drop2.grab_release()
 
     trv.bind("<Button-3>", do_popup)
 
@@ -179,12 +160,8 @@ def main():
 
     trv.bind('<ButtonRelease-1>', select_item)
     trv.bind('<<Subscribe>>', onSub)
+    trv.bind('<<Publish>>', showLogs)
     trv.grid(row=0, column=0, sticky='nsew')
-
-    # add scroll
-    # scrollbar = Scrollbar(root, orient=VERTICAL, command=trv.yview)
-    # trv.configure(yscroll=scrollbar.set)
-    # scrollbar.grid(row=0, column=1, sticky='ns')
 
     def on_closing():
         server.stop()
@@ -196,4 +173,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-    # coment

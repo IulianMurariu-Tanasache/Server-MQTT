@@ -7,6 +7,9 @@ class Session:
     def __init__(self, _id, topics):
         self.client_id = _id
         self.topics = topics
+        self.noAck1 = []
+        self.noAck2 = []
+        self.pendingToSend = []
 
 
 class Packet:

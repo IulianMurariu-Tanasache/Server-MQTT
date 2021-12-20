@@ -2,6 +2,7 @@ import select
 import socket
 import threading
 import traceback
+
 from Packets import *
 
 
@@ -25,6 +26,7 @@ class Client:
 
     def fileno(self):
         return self.conn.fileno()
+
     def toDec(self):
         self.toDC = True
 
@@ -75,8 +77,8 @@ class Server:
         self.socket.bind((self.ip, self.port))
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.printLog('Server starting on ip: ' + self.ip)
-        self.handleClientsThread = threading.Thread(target=self.handle_clients, args=())
         self.listenThread = threading.Thread(target=self.listen, args=())
+        self.handleClientsThread = threading.Thread(target=self.handle_clients, args=())
         self.listenThread.start()
         self.handleClientsThread.start()
         self.closeConnectionsTimer = threading.Timer(0.5, self.closeConn)
@@ -105,9 +107,6 @@ class Server:
         return True
 
     def handleClient(self, data, client, packet_type, flags):
-        # aici if/switch
-
-        # reset timer keepAlive
         if client.connected:
             self.resetTimer(client)
         if packet_type == 'CONNECT':
@@ -123,15 +122,19 @@ class Server:
                 self.resetTimer(client)
 
         if packet_type == 'SUBSCRIBE':
-            #string matching la stanga (si dreapta) pt topic filter->lista cu toate nivelele pentru un topic
-            #dup e degaba
-            #ncap pt wireshark pt adaptor de loopback
-            #packet_id similar cu dup?
+            # string matching la stanga (si dreapta) pt topic filter->lista cu toate nivelele pentru un topic
+            # dup e degaba
+            # ncap pt wireshark pt adaptor de loopback
+            # packet_id similar cu dup?
 
             sub = SubscribePacket(client)
             sub.decode(data[0:], flags)
             if self.checkTopicFilter(sub.topics):
                 client.topics += sub.topics
+                for sess in self.sessions:
+                    if sess.client_id == client.id:
+                        sess.topics = client.topics
+                        break
                 for topic in client.topics:
                     if topic in self.topics and client.id not in self.topics[topic]:
                         self.topics[topic].append(client.id)
@@ -153,7 +156,11 @@ class Server:
             if publish.topic not in self.topics_history.keys():
                 self.topics_history[publish.topic] = [publish.msg]
             else:
+                if len(self.topics_history[publish.topic]) > 10:
+                    self.topics_history[publish.topic] = self.topics_history[publish.topic][
+                                                         len(self.topics_history[publish.topic]) - 10:]
                 self.topics_history[publish.topic].append(publish.msg)
+            self.trv.event_generate("<<Publish>>")
             # forward la ceilalti clienti
             self.packet_ids.remove(publish.packet_identifier)
 
@@ -184,7 +191,7 @@ class Server:
 
         if packet_type == 'DISCONNECT':
             client.will = False
-            client.toDC = True
+            self.discClient(client)
 
         if packet_type == 'PINGREQ':
             pingresp = PingRespPacket(client)
@@ -194,7 +201,10 @@ class Server:
         self.printLog(f'{client.id if client.id is not None else client.addr} a trimis {packet_type}')
 
     def handle_clients(self):
-        while self.state:
+        while True:
+            print('nop')
+            if not self.state:
+                return
             if len(self.clients) == 0:
                 continue
             to_read, _, _ = select.select(self.clients, [], [], 1)
@@ -202,7 +212,7 @@ class Server:
                 data = client.conn.recv(1024)
                 if data == b'':
                     client.toDC = True
-                    return
+                    continue
                 while len(data) > 0:
                     binary = format(int.from_bytes(data[0:1], "big"), '#010b')[2:]
                     packet_type = int(binary[0:4], 2)
@@ -213,19 +223,20 @@ class Server:
                     curr_pack = data[1 + var_length: 1 + var_length + remaining_length]
                     data = data[1 + var_length + remaining_length:]
                     self.handleClient(curr_pack, client, packet_type, flags)
+        print('gata?')
 
-    def discClient(self, id):
-        for client in self.clients:
-            if client.id == id:
-                client.toDC = True
-                return
+    def discClient(self, client):
+        for topic in client.topics:
+            if topic in self.topics:
+                self.topics[topic].remove(client.id)
+        client.toDC = True
 
     def closeConn(self):
         to_remove = []
         for client in self.clients:
             if client.toDC:
                 if client.will:
-                    #trimite will-ul mai departe
+                    # trimite will-ul mai departe
                     pass
                 client.connected = False
                 client.conn.shutdown(2)
@@ -235,9 +246,12 @@ class Server:
         self.closeConnectionsTimer = threading.Timer(0.5, self.closeConn)
         self.closeConnectionsTimer.start()
 
-
     def resetTimer(self, client):
         client.timer = threading.Timer(1.5 * client.keepAlive, client.toDec)
         client.timer.start()
-        # coment
 
+    def discClientById(self, selected_client):
+        for client in self.clients:
+            if client.id == selected_client:
+                self.discClient(client)
+                return
