@@ -29,7 +29,7 @@ def decodeUTF8(data):
 
 def decodeVariableInt(byte):
     # variable int decodare luata din documentatia mqtt
-    # returneaza cati octeti a avut lungimea si cat e rezultatul decodarii
+    # returneaza cati octeti a avut lungimea si cat e rezultatul decodariii
     multiplier = 1
     val = 0
     i = 0

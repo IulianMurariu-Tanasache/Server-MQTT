@@ -14,7 +14,7 @@ def select_item(event):
     x, y = event.x, event.y
     if y < 25:
         return
-    # select doar topicuri(0,25 ->200,25); h = 45
+    # select doar topicuri(0,25 ->200,25); h = 450
     if 0 <= x <= 200:
         tree = event.widget
         selected_topic = tree.focus()

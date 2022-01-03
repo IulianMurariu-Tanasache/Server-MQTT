@@ -126,7 +126,7 @@ class Server:
         if packet_type == 'SUBSCRIBE':
             # string matching la stanga (si dreapta) pt topic filter->lista cu toate nivelele pentru un topic
             # dup e degeaba
-            # ncap pt wireshark pt adaptor de loopback
+            # ncap pt wireshark pt adaptor de loopbacks
             # packet_id similar cu dup?
 
             sub = SubscribePacket(client)
