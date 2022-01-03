@@ -46,7 +46,7 @@ class ConnectPacket(Packet):
             self.connCode = 1
             return
 
-        #print(connect_flags[0], connect_flags, connect_flags[1])
+        # print(connect_flags[0], connect_flags, connect_flags[1])
         reserved = connect_flags[7] == '1'
 
         if reserved:
@@ -61,7 +61,7 @@ class ConnectPacket(Packet):
         self.client.willRetain = connect_flags[2] == '1'
         password = connect_flags[1] == '1'
         username = connect_flags[0] == '1'
-        self.client.keepAlive = keep_alive# timerul  = keepAlive * 1.5 #keep alive  0 fara timer
+        self.client.keepAlive = keep_alive  # timerul  = keepAlive * 1.5 #keep alive  0 fara timer
 
         payload_data = data[10:]
         id_len, self.client.id = decodeUTF8(payload_data)
@@ -158,7 +158,7 @@ class SubscribePacket(Packet):
             curr += 1
             self.retCode = qos
             self.topics.append(topic)
-            #print(topic, qos)
+            # print(topic, qos)
 
 
 class PublishPacket(Packet):
@@ -187,10 +187,37 @@ class PublishPacket(Packet):
         self.msg = msgpayload
         print(topic_name, msgpayload)
 
+    def encode(self, data):
+        dup = data[3]
+        retain = data[0]
+        qos = int(data[1:3], 2)
+
+        if qos == 0:
+            fixHeader = struct.pack('!BB', 49, 0)
+        if qos == 3:
+            self.client.toDC = True
+            self.connCode = 1
+            return
+
+        #mai multe nu cred ca am gasit???????????????????
+
+        hearder = b''.join([fixHeader, self.topic_name, self.packet_identifier])
+        return hearder
+
 
 class PubackPacket(Packet):
     def __init__(self, client):
         super().__init__(client)
+
+    def decode(self, data, flags):
+        reserved = flags[0:4]
+        if len(data) != 2:
+            self.client.toDC = True
+            return
+        if int(reserved, 2) != 0:
+            self.client.toDC = True
+            return
+        self.packet_id = struct.unpack('!H', data)
 
     def encode(self, data):
         fixHeader = struct.pack('!BB', 64, 2)
@@ -205,6 +232,16 @@ class PubrecPacket(Packet):
     def __init__(self, client):
         super().__init__(client)
 
+    def decode(self, data, flags):
+        reserved = flags[0:4]
+        if int(flags, 2) != 2:
+            self.client.toDC = True
+            return
+        if int(reserved, 2) != 0:
+            self.client.toDC = True
+            return
+        self.packet_id = struct.unpack('!H', data)
+
     def encode(self, data):
         fixHeader = struct.pack('!BB', 80, 2)
 
@@ -218,6 +255,19 @@ class PubrelPacket(Packet):
     def __init__(self, client):
         super().__init__(client)
 
+    def decode(self, data, flags):
+        reserved = flags[0:4]
+        if len(data) != 2:
+            self.client.toDC = True
+            return
+        if int(reserved, 2) != 2:
+            self.client.toDC = True
+            return
+        self.packet_id = struct.unpack('!H', data)
+        # if good == false -> malformed packet ######trebuie malformated pack si aici si nu stiu---ai facut la subscrabe pack
+
+
+
     def encode(self, data):
         fixHeader = struct.pack('!BB', 98, 2)
 
@@ -230,6 +280,16 @@ class PubrelPacket(Packet):
 class PubcompPacket(Packet):
     def __init__(self, client):
         super().__init__(client)
+
+    def decode(self, data, flags):
+        reserved = flags[0:4]
+        if int(flags, 2) != 2:
+            self.client.toDC = True
+            return
+        if int(reserved, 2) != 0:
+            self.client.toDC = True
+            return
+        self.packet_id = struct.unpack('!H', data)
 
     def encode(self, data):
         fixHeader = struct.pack('!BB', 112, 2)
@@ -294,7 +354,7 @@ class UnSubackPacket(Packet):  # encode
         return header
 
 
-class PingReqPacket(Packet):#asta nu face nimic ptr noi
+class PingReqPacket(Packet):  # asta nu face nimic ptr noi
     def __init__(self, client):
         super().__init__(client)
 
@@ -319,4 +379,4 @@ class Disconnect(Packet):
 
     def decode(self, data, flags):
         pass
-#coment
+# coment

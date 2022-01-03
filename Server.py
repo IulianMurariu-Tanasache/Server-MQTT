@@ -41,6 +41,7 @@ class Server:
         self.socket = None
         self.clients = []
         self.topics = {}
+        self.retain_messages = {}
         self.topics_history = {}
         self.trv = trv
         self.sessions = []
@@ -106,6 +107,7 @@ class Server:
                     return False
         return True
 
+
     def handleClient(self, data, client, packet_type, flags):
         if client.connected:
             self.resetTimer(client)
@@ -123,7 +125,7 @@ class Server:
 
         if packet_type == 'SUBSCRIBE':
             # string matching la stanga (si dreapta) pt topic filter->lista cu toate nivelele pentru un topic
-            # dup e degaba
+            # dup e degeaba
             # ncap pt wireshark pt adaptor de loopback
             # packet_id similar cu dup?
 
@@ -143,7 +145,6 @@ class Server:
                 self.trv.event_generate("<<Subscribe>>")
             else:
                 sub.retCode = 128
-
             suback = SubackPacket(client)
             subackData = suback.encode((sub.packet_id, sub.retCode))
 
@@ -152,6 +153,11 @@ class Server:
         if packet_type == 'PUBLISH':
             publish = PublishPacket(client)
             publish.decode(data[0:], flags)
+
+            if publish.retain == 1:
+                self.retain_messages[publish.topic] = self.retain_messages + {'publish.topic': publish.msg}
+            #publish.retain == 1
+            #self.retain_messages.add(publish.topic,publish.msg)
             self.packet_ids.append(publish.packet_identifier)
             if publish.topic not in self.topics_history.keys():
                 self.topics_history[publish.topic] = [publish.msg]
@@ -202,7 +208,7 @@ class Server:
 
     def handle_clients(self):
         while True:
-            print('nop')
+            # print('nop')
             if not self.state:
                 return
             if len(self.clients) == 0:
