@@ -30,10 +30,45 @@ def select_item(event):
 
 
 def NewMenu():
-    top = Toplevel()
+    top = Tk()
     top.title("New Menu")
-    top.geometry("300x300")
-    buton = Button(top, text='close menu', command=top.destroy).place(x=200, y=250)
+    top.geometry("400x400")
+
+    #coloane
+    colums = ('username', 'password')
+    #treeview
+    tree = Treeview(top, columns=colums, show='headings')
+    tree.heading('username', text="user")
+    tree.heading('password', text='pass')
+    tree.place(x=0, y=0)
+
+    #citesc din fisier?
+    f = open('clients.txt', mode='r')
+    print(f.read())
+
+    #campurile ptr select?
+    e_name = Entry(top).place(x=50, y=300)
+    e_pass = Entry(top).place(x=200, y=300)
+
+    buton = Button(top, text='close menu', command=top.destroy).place(x=300, y=350)
+    button1 = Button(top, text='update client', command=modefly).place(x=200, y=350)
+    button2 = Button(top, text='delete client', command=delete).place(x=100, y=350)
+    button3 = Button(top, text='add client', command=add).place(x=1, y=350)
+    f.close()
+
+
+
+
+def add():
+    pass
+
+
+def delete():
+    pass
+
+
+def modefly():
+    pass
 
 
 def main():
