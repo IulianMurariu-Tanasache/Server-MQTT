@@ -27,6 +27,7 @@ def select_item(event):
                 if topic != selected_topic:
                     tree.set(topic, 'clienti', '')
 
+dictionar= {}
 
 def NewMenu():
     top = Tk()
@@ -42,32 +43,57 @@ def NewMenu():
     tree.place(x=0, y=0)
 
     #citesc din fisier?
-    f = open('clients.txt', mode='r')
-    print(f.read())
+    with open('clients.txt', 'r') as file:
+        f = file.read()
+        k = 0
+    for i in range(len(f)):
+        if f[i] ==":":
+            ad = f[k:i]
+            k = k + len(ad)
+        if f[i] == "\n":
+            rs = f[k+1:i]
+            k = k + len(rs)+2
+            dictionar[ad] = rs
+            tree.insert("", END, iid=ad, values=(ad, rs))
 
-    #campurile ptr select?
-    e_name = Entry(top).place(x=50, y=300)
-    e_pass = Entry(top).place(x=200, y=300)
+    #campurile ptr select?#text ce drq is
+    e_name = Entry(top, text="username")
+    e_name.place(x=50, y=300)
+    e_pass = Entry(top, text="password")
+    e_pass.place(x=200, y=300)
+
+
+
+
+    def add():#sterge din fisier cand adaug ceva nou
+        f = e_name.get()
+        g = e_pass.get()
+        dictionar[f] = g
+        tree.insert("", END, iid=f, values=(f, g))
+        with open('clients.txt', 'a+') as files:
+            files.write(f+':'+g+'\n')
+
+
+    def delete():
+        #select ptr interfata
+        selected_user = tree.focus()
+        tree.delete(selected_user)
+
+        lista = dictionar.keys()
+        print(lista)
+        for i in range(len(lista)):
+            print(lista[i])
+            if lista[i] == selected_user:
+                lista[i] = lista[i+1]
+        print(lista)
+
+
+
+
 
     buton = Button(top, text='close menu', command=top.destroy).place(x=300, y=350)
-    button1 = Button(top, text='update client', command=modefly).place(x=200, y=350)
-    button2 = Button(top, text='delete client', command=delete).place(x=100, y=350)
-    button3 = Button(top, text='add client', command=add).place(x=1, y=350)
-    f.close()
-
-
-
-
-def add():
-    pass
-
-
-def delete():
-    pass
-
-
-def modefly():
-    pass
+    button2 = Button(top, text='delete client', command=delete).place(x=200, y=350)
+    button3 = Button(top, text='add client', command=add).place(x=100, y=350)
 
 
 def main():
