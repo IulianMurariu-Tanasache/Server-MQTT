@@ -2,6 +2,7 @@ from tkinter import *
 from tkinter.ttk import Treeview
 
 from Server import *
+from Packets import auth_dict
 
 topics = {}
 
@@ -27,76 +28,83 @@ def select_item(event):
                 if topic != selected_topic:
                     tree.set(topic, 'clienti', '')
 
-dictionar= {}
+
+def getCredentials():
+    with open('clients.txt', 'r') as file:
+        f = file.read()
+        k = 0
+        ad = ''
+    for i in range(len(f)):
+        if f[i] == ":":
+            ad = f[k:i]
+            k = k + len(ad)
+        if f[i] == "\n":
+            rs = f[k + 1:i]
+            k = k + len(rs) + 2
+            auth_dict[ad] = rs
+    if k < len(f):
+        rs = f[k + 1:]
+        k = k + len(rs) + 2
+        auth_dict[ad] = rs
+
 
 def NewMenu():
     top = Tk()
     top.title("New Menu")
     top.geometry("400x400")
 
-    #coloane
+    # coloane
     colums = ('username', 'password')
-    #treeview
+    # treeview
     tree = Treeview(top, columns=colums, show='headings')
     tree.heading('username', text="user")
     tree.heading('password', text='pass')
     tree.place(x=0, y=0)
 
-    #citesc din fisier?
-    with open('clients.txt', 'r') as file:
-        f = file.read()
-        k = 0
-    for i in range(len(f)):
-        if f[i] ==":":
-            ad = f[k:i]
-            k = k + len(ad)
-        if f[i] == "\n":
-            rs = f[k+1:i]
-            k = k + len(rs)+2
-            dictionar[ad] = rs
-            tree.insert("", END, iid=ad, values=(ad, rs))
+    getCredentials()
+    for cheie in auth_dict.keys():
+        tree.insert("", END, iid=cheie, values=(cheie, auth_dict[cheie]))
 
-    #campurile ptr select?#text ce drq is
+    # campurile ptr select?#text ce drq is
     e_name = Entry(top, text="username")
     e_name.place(x=50, y=300)
     e_pass = Entry(top, text="password")
     e_pass.place(x=200, y=300)
 
-
-
-
-    def add():#sterge din fisier cand adaug ceva nou
-        f = e_name.get()
-        g = e_pass.get()
-        dictionar[f] = g
-        tree.insert("", END, iid=f, values=(f, g))
+    def add():
+        new_user = e_name.get()
+        new_pass = e_pass.get()
+        auth_dict[new_user] = new_pass
+        tree.insert("", END, iid=new_user, values=(new_user, new_pass))
         with open('clients.txt', 'a+') as files:
-            files.write(f+':'+g+'\n')
-
+            files.write(new_user + ':' + new_pass + '\n')
 
     def delete():
-        #select ptr interfata
         selected_user = tree.focus()
         tree.delete(selected_user)
+        auth_dict.pop(selected_user)
+        with open('clients.txt', 'r+') as file:
+            file_content = file.read()
+            if selected_user in file_content:
+                index = file_content.find(selected_user)
+                end = len(file_content)
+                if '\n' in file_content[index:]:
+                    end = file_content[index:].find('\n')
+                file_content = file_content.replace(file_content[index:index + end + 1], '')
+                print(file_content)
+            file.seek(0)
+            file.truncate(0)
+            file.write(file_content)
 
-        lista = dictionar.keys()
-        print(lista)
-        for i in range(len(lista)):
-            print(lista[i])
-            if lista[i] == selected_user:
-                lista[i] = lista[i+1]
-        print(lista)
-
-
-
-
-
-    buton = Button(top, text='close menu', command=top.destroy).place(x=300, y=350)
-    button2 = Button(top, text='delete client', command=delete).place(x=200, y=350)
-    button3 = Button(top, text='add client', command=add).place(x=100, y=350)
+    button2 = Button(top, text='delete client', command=delete)
+    button2.place(x=200, y=350)
+    button3 = Button(top, text='add client', command=add)
+    button3.place(x=100, y=350)
 
 
 def main():
+    getCredentials()
+
     root = Tk()
     root.title("Server MQTT")
     root.geometry("1024x730")

@@ -128,10 +128,10 @@ class Server:
                     return False
         return True
 
-    def acknowledgePacket(self, ack, client):
-        for packet in client.session.noAck:
-            if ack.packet_id == packet.packet_id:
-                client.session.noAck.remove(packet)
+    def acknowledgePacket(self, ack_id, client):
+        for id in client.session.noAck.keys():
+            if ack_id == id:
+                client.session.noAck.pop(id)
                 return
 
     def publishMessage(self, who, retain, msg, topic, qos):
@@ -147,7 +147,7 @@ class Server:
 
         for c in who:
             c.conn.sendall(publishData)
-            c.session.noAck.append(publish)
+            c.session.noAck[publish.packet_id] = publishData
 
     def handleClient(self, data, client, packet_type, flags):
         if client.connected:
@@ -262,7 +262,7 @@ class Server:
             publish.packet_id = new_pub_id
             for c in self.topics[publish.topic]:
                 c.conn.sendall(publishData)
-                c.session.noAck.append(publish)
+                c.session.noAck[publish.packet_id] = publishData
 
             if publish.qos == 1:
                 puback = PubackPacket(client)
@@ -273,7 +273,7 @@ class Server:
                 pubrec = PubrecPacket(client)
                 pubrecData = pubrec.encode(old_pub_id)
                 client.conn.sendall(pubrecData)
-                client.session.noAck.append(pubrec)
+                client.session.noAck[pubrec.packet_id] = pubrecData
 
         if packet_type == 'PUBACK':
             puback = PubackPacket(client)
@@ -288,7 +288,7 @@ class Server:
             pubrelData = pubrel.encode(pubrec.packet_id)
             client.conn.sendall(pubrelData)
             self.acknowledgePacket(pubrec, client)
-            client.session.noAck.append(pubrel)
+            client.session.noAck[pubrel.packet_id] = pubrelData
 
         if packet_type == 'PUBREL':
             pubrel = PubrelPacket(client)
@@ -297,7 +297,7 @@ class Server:
             pubcompData = pubcomp.encode(pubrel.packet_id)
             client.conn.sendall(pubcompData)
             self.acknowledgePacket(pubrel, client)
-            client.session.noAck.append(pubcomp)
+            client.session.noAck[pubcomp.packet_id] = pubcompData
 
         if packet_type == 'PUBCOMP':
             pubcomp = PubcompPacket(client)
@@ -402,10 +402,10 @@ class Server:
 
     def reSendPackets(self):
         for session in self.sessions:
-            for packet in session.noAck:
-                self.getClientByID(session.client_id).conn.sendall(packet)
-            for packet in session.pendingToSend:
-                self.getClientByID(session.client_id).conn.sendall(packet)
+            for id in session.noAck.keys():
+                self.getClientByID(session.client_id).conn.sendall(session.noAck[id])
+            for id in session.pendingToSend.keys():
+                self.getClientByID(session.client_id).conn.sendall(session.pendingToSend[id])
         self.resendTimer.cancel()
         self.resendTimer = threading.Timer(1, self.reSendPackets)
         self.resendTimer.start()

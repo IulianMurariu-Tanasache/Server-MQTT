@@ -1,12 +1,7 @@
 import functools as fct
 from HelperFunctions import *
 
-auth_dict = {
-    'eusunt': 'toteu',
-    'java': 'kotlin',
-    'admin': 'admin',
-    'user': 'qwerty'
-}
+auth_dict = {}
 
 
 def updateAuthDict():
@@ -17,8 +12,8 @@ class Session:
     def __init__(self, _id, topics):
         self.client_id = _id
         self.topics = topics
-        self.noAck = []
-        self.pendingToSend = []
+        self.noAck = {}
+        self.pendingToSend = {}
 
 
 class Packet:
