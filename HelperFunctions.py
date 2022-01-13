@@ -7,8 +7,8 @@ packet_types_to_int = {
     'PUBLISH': 3,
     'PUBACK': 4,
     'PUBREC': 5,
-    'PUBCOMP': 6,
-    'PUBREL': 7,
+    'PUBREL': 6,
+    'PUBCOMP': 7,
     'SUBSCRIBE': 8,
     'SUBACK': 9,
     'UNSUBSCRIBE': 10,
@@ -29,7 +29,7 @@ def decodeUTF8(data):
 
 def decodeVariableInt(byte):
     # variable int decodare luata din documentatia mqtt
-    # returneaza cati octeti a avut lungimea si cat e rezultatul decodarii
+    # returneaza cati octeti a avut lungimea si cat e rezultatul decodariii
     multiplier = 1
     val = 0
     i = 0
