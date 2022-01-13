@@ -133,10 +133,6 @@ def main():
     trv = Treeview(root, columns=columns, show='headings', height=28)
     trv.column('clienti', minwidth=0, width=390, stretch=False)
 
-    def disconnectClient():
-        print(f"Disconnect {selected_client}")
-        server.discClientById(selected_client)
-
     def showLogs(event):
         if selected_topic is None or selected_topic not in server.topics_history.keys():
             return
@@ -146,8 +142,28 @@ def main():
         for i in range(len(server.topics_history[selected_topic])):
             historyList.insert(i, lisy[-1 * (1 + i)])
 
+    def discMenu():
+        global selected_client
+        top = Tk()
+        top.title("New Menu")
+        top.geometry("400x400")
+
+        clientsList = Listbox(top, width=40, height=15, relief="raised", font=('Tahoma', 10))
+        clientsList.place(x=20, y=20)
+
+        for client in selected_client:
+            clientsList.insert('end', client.id)
+
+        def disc():
+            client = clientsList.get(clientsList.curselection()[0])
+            print(f"Disconnect {client}")
+            server.discClientById(client)
+
+        button2 = Button(top, text='Disconnect client', command=disc)
+        button2.place(x=75, y=350)
+
     drop = Menu(root, tearoff=0)
-    drop.add_command(label="Disconnect", command=disconnectClient)
+    drop.add_command(label="Disconnect", command=discMenu)
 
     def do_popup(event):
         global selected_client, selected_topic
@@ -160,7 +176,7 @@ def main():
                 if iid:
                     # mouse pointer over item
                     tree.selection_set(iid)
-                    selected_client = tree.item(iid)['values'][1]
+                    selected_client = server.topics[selected_topic]
                     drop.tk_popup(event.x_root, event.y_root)
             finally:
                 drop.grab_release()
