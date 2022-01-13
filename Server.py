@@ -144,10 +144,20 @@ class Server:
         publish.topic = topic
         publish.qos = qos
         publishData = publish.encode(self.topicMaxQOS)
+        if publish.topic not in self.topics_history.keys():
+            self.topics_history[publish.topic] = [publish.msg]
+        elif self.topics_history[publish.topic] != publish.msg:
+            if len(self.topics_history[publish.topic]) > 10:
+                self.topics_history[publish.topic] = self.topics_history[publish.topic][
+                                                     len(self.topics_history[publish.topic]) - 10:]
+            self.topics_history[publish.topic].append(publish.msg)
+        self.trv.event_generate("<<Publish>>")
 
         for c in who:
             c.conn.sendall(publishData)
-            c.session.noAck[publish.packet_id] = publishData
+            self.packet_ids.append(publish.packet_id)
+            if publish.qos > 0:
+                c.session.noAck[publish.packet_id] = publishData
 
     def handleClient(self, data, client, packet_type, flags):
         if client.connected:
@@ -244,8 +254,7 @@ class Server:
 
             new_pub_id = self.genPacketID()
             old_pub_id = publish.packet_id
-            self.packet_ids.append(new_pub_id)
-            self.packet_ids.append(old_pub_id)
+            #self.packet_ids.append(old_pub_id)
 
             if publish.topic not in self.topics_history.keys():
                 self.topics_history[publish.topic] = [publish.msg]
@@ -258,11 +267,13 @@ class Server:
 
             # forward la ceilalti clienti
             publish.retain = 0
-            publishData = publish.encode(self.topicMaxQOS)
             publish.packet_id = new_pub_id
+            publishData = publish.encode(self.topicMaxQOS)
             for c in self.topics[publish.topic]:
                 c.conn.sendall(publishData)
-                c.session.noAck[publish.packet_id] = publishData
+                self.packet_ids.append(new_pub_id)
+                if publish.qos > 0:
+                    c.session.noAck[new_pub_id] = publishData
 
             if publish.qos == 1:
                 puback = PubackPacket(client)
@@ -279,7 +290,7 @@ class Server:
             puback = PubackPacket(client)
             puback.decode(data[0:], flags)
             self.packet_ids.remove(puback.packet_id)
-            self.acknowledgePacket(puback, client)
+            self.acknowledgePacket(puback.packet_id, client)
 
         if packet_type == 'PUBREC':
             pubrec = PubrecPacket(client)
@@ -287,7 +298,7 @@ class Server:
             pubrel = PubrelPacket(client)
             pubrelData = pubrel.encode(pubrec.packet_id)
             client.conn.sendall(pubrelData)
-            self.acknowledgePacket(pubrec, client)
+            self.acknowledgePacket(pubrec.packet_id, client)
             client.session.noAck[pubrel.packet_id] = pubrelData
 
         if packet_type == 'PUBREL':
@@ -296,14 +307,14 @@ class Server:
             pubcomp = PubcompPacket(client)
             pubcompData = pubcomp.encode(pubrel.packet_id)
             client.conn.sendall(pubcompData)
-            self.acknowledgePacket(pubrel, client)
-            client.session.noAck[pubcomp.packet_id] = pubcompData
+            self.acknowledgePacket(pubrel.packet_id, client)
+            #client.session.noAck[pubcomp.packet_id] = pubcompData
 
         if packet_type == 'PUBCOMP':
             pubcomp = PubcompPacket(client)
             pubcomp.decode(data[0:], flags)
             self.packet_ids.remove(pubcomp.packet_id)
-            self.acknowledgePacket(pubcomp, client)
+            self.acknowledgePacket(pubcomp.packet_id, client)
 
         if packet_type == 'UNSUBSCRIBE':
             unsub = UnsubscribePacket(client)
@@ -401,11 +412,13 @@ class Server:
                 return client
 
     def reSendPackets(self):
-        for session in self.sessions:
-            for id in session.noAck.keys():
-                self.getClientByID(session.client_id).conn.sendall(session.noAck[id])
-            for id in session.pendingToSend.keys():
-                self.getClientByID(session.client_id).conn.sendall(session.pendingToSend[id])
-        self.resendTimer.cancel()
-        self.resendTimer = threading.Timer(1, self.reSendPackets)
-        self.resendTimer.start()
+        try:
+            for session in self.sessions:
+                for id in session.noAck.keys():
+                    self.getClientByID(session.client_id).conn.sendall(session.noAck[id])
+                for id in session.pendingToSend.keys():
+                    self.getClientByID(session.client_id).conn.sendall(session.pendingToSend[id])
+        finally:
+            self.resendTimer.cancel()
+            self.resendTimer = threading.Timer(5, self.reSendPackets)
+            self.resendTimer.start()
